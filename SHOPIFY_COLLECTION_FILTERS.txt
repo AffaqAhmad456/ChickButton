@@ -1,0 +1,48 @@
+CHICKBUTTON — COLLECTION-DRIVEN FILTERS
+=======================================
+
+What changed (storefront only: no backend, SQL, auth, cart or checkout changes)
+------------------------------------------------------------------------------
+New file:  ChickButton-Customer/src/catalogFacets.ts
+Edited:    ChickButton-Customer/src/App.tsx
+
+Every product's Shopify collections are parsed once into facets, and ALL filters
+(sidebar, Home BABY/BOYS/GIRLS cards, Categories page, breadcrumbs) read from that.
+
+Recognised collections (spacing / case / plural tolerant)
+  Baby Boys, Baby Girls, Baby Sets, Baby Frocks
+  Boys, Boys Sets / Shirts / Pants / Formal / Traditional
+  Girls, Girls Sets / Shirts / Pants / Frocks / Formal / Traditional
+  Summer, Winter, New Arrivals, Sale, Fresh Favourites
+Add a new "<Baby|Boys|Girls> <Type>" collection later and it works with no code change.
+
+Multi-filter rules (sidebar "Category")
+  Baby Boys + Formal      -> formal for boys   (Boys Formal products)
+  Baby Girls + Formal     -> formal for girls  (Girls Formal products)
+  Baby Boys + Sets        -> boys' sets
+  Baby Girls + Frocks     -> girls' frocks
+  Shirts + Pants          -> either (same kind of option = OR)
+  Different kinds         -> AND (audience AND garment AND season)
+  Summer + Winter         -> either; combined with others it still narrows
+  New Arrivals + Sale     -> must be both
+  Baby Sets / Baby Frocks -> only products inside those Baby collections
+  Sale also matches any product with a compare-at (strikethrough) price.
+
+"The Boys collection goes in Baby Boys" (and same for Girls)
+  The Baby Boys / Baby Girls filters include the plain Boys* / Girls* collections.
+  To make them mean ONLY the Baby Boys / Baby Girls collections, set
+  BABY_AUDIENCE_INCLUDES_BOYS_GIRLS = false at the top of catalogFacets.ts.
+
+Home / Categories links
+  /shop?section=BABY|BOYS|GIRLS  -> products in that section's own collections.
+  A removable chip (e.g. "Boys ✕") shows when a section is active.
+  Categories > Baby links now use the Baby Boys/Girls/Sets/Frocks filters directly.
+
+Other fixes / speed
+  - Colour filter now matches ANY colour a product has (was: first colour only).
+  - Filtering is memoised (no re-filtering on every render / infinite-scroll step).
+  - Filters are initialised from the URL on first render (no flash of all products).
+  - Unknown/old category links show "no match" instead of silently showing everything.
+  - Product breadcrumb/section/category now derive from the same parser.
+
+No new SQL migration, no backend change, no new environment variables.

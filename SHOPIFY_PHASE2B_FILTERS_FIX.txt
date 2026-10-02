@@ -1,0 +1,36 @@
+CHICKBUTTON — SHOPIFY PHASE 2B FILTERS FIX
+
+What changed
+------------
+1. Restored the original category filter list permanently:
+   Baby Boys, Baby Girls, Baby Sets, Baby Frocks,
+   Sets, Shirts, Pants, Frocks, Formal, Traditional,
+   Summer, Winter, New Arrivals, Sale.
+
+2. Restored the original colour choices permanently and also appends any new Shopify colours.
+
+3. Category filters now map to Shopify collections dynamically.
+   Examples:
+   - Frocks -> Girls Frocks (and any future non-baby section Frocks collection)
+   - Sets -> Boys Sets / Girls Sets
+   - Shirts -> Boys Shirts / Girls Shirts
+   - Formal -> Boys Formal / Girls Formal
+   - Baby Boys -> exact Baby Boys collection
+   - Summer / Winter / New Arrivals / Sale -> exact Shopify collection
+
+4. Search still searches product title, slug, section, mapped category, size, colour, age, and every Shopify collection title.
+
+5. No UI layout/design, auth, cart, checkout, ngrok/caddie, backend Shopify connection, or Supabase schema was changed.
+
+Testing recommendation
+----------------------
+Create products in Shopify one category at a time and assign the corresponding collection(s), then refresh the storefront and test:
+- Search by product/category name
+- Category checkbox
+- Age
+- Size
+- Colour
+- Price
+- Availability
+
+No new SQL migration is required for this fix.

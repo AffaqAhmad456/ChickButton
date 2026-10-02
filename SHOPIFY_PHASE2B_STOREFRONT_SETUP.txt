@@ -1,0 +1,59 @@
+CHICKBUTTON — SHOPIFY PHASE 2B
+=============================
+
+WHAT CHANGED
+- The visible storefront catalog now loads from GET /api/shopify/products.
+- Existing visual layout/design is preserved.
+- Home product cards use Shopify products.
+- Shop/search/filter/sort use Shopify products.
+- Product detail pages use Shopify product images, price, sizes and availability.
+- Add/update/remove cart now send Shopify variant IDs to the Phase 2A cart API.
+- Collections drive category filtering.
+- Variant Size/Age options drive the size filter.
+- Shopify inventory drives availability.
+- No new SQL migration is required for Phase 2B.
+
+IMPORTANT
+- Keep the Phase 2A SQL migration (07_shopify_cart_migration.sql) installed.
+- Shopify credentials belong ONLY in ChickButton-Backend/.env.local.
+- Do not expose SHOPIFY_CLIENT_SECRET to the Vite frontend.
+- Checkout/order creation is still the next migration phase. Do not treat Shopify cart items as production-ready Shopify orders yet.
+- The existing wishlist database still points at the legacy Supabase product table. Shopify wishlist persistence will be migrated with the remaining commerce persistence work.
+
+BACKEND .env.local
+SHOPIFY_SHOP=sr1nn2-wm
+SHOPIFY_CLIENT_ID=YOUR_REAL_CLIENT_ID
+SHOPIFY_CLIENT_SECRET=YOUR_REAL_CLIENT_SECRET
+SHOPIFY_API_VERSION=2026-10
+CUSTOMER_ORIGIN=https://caddie-unlearned-author.ngrok-free.dev
+COOKIE_SECURE=true
+
+RUN
+1) Backend terminal
+   cd ChickButton-Backend
+   npm install
+   npm run dev
+
+2) Frontend terminal
+   cd ChickButton-Customer
+   npm install
+   npm run dev
+
+3) Public tunnel terminal
+   ngrok http --url=caddie-unlearned-author.ngrok-free.dev 5173
+
+TEST ORDER
+1) http://localhost:3000/api/shopify/products
+2) http://localhost:5173
+3) https://caddie-unlearned-author.ngrok-free.dev
+4) Home should show Shopify products.
+5) Shop should show Shopify products.
+6) Open Frock and verify Shopify image/price/sizes.
+7) Add a Shopify size to bag.
+8) Refresh and verify the bag persists.
+9) Quantity + / - and remove should still work.
+10) Search for a Shopify product title.
+11) Test category/size/availability filters.
+
+NO DATABASE RESET IS REQUIRED.
+DO NOT DELETE THE LEGACY PRODUCT TABLES YET.

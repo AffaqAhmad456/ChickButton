@@ -1,0 +1,29 @@
+CHICKBUTTON — SHOPIFY FINAL ORDER FLOW
+
+1) Run ChickButton-Backend/sql/08_shopify_order_migration.sql once in Supabase SQL Editor.
+2) Keep these backend environment variables:
+   SHOPIFY_SHOP=sr1nn2-wm
+   SHOPIFY_CLIENT_ID=...
+   SHOPIFY_CLIENT_SECRET=...
+   SHOPIFY_API_VERSION=2026-10
+3) Start backend on localhost:3000.
+4) Start customer Vite app on localhost:5173.
+5) Start ngrok:
+   ngrok http --url=caddie-unlearned-author.ngrok-free.dev 5173
+6) Add a Shopify product/variant to the cart from the real storefront.
+7) Checkout and confirm the order.
+8) Verify Shopify Admin > Orders:
+   - order appears
+   - Payment = Pending (COD)
+   - Fulfillment = Unfulfilled
+   - line-item prices are present
+   - shipping address is present
+   - delivery charge is present when applicable
+   - inventory decreases
+9) For a signed-in customer, My Orders continues using the local Supabase order snapshot linked to the Shopify order ID.
+
+IMPORTANT
+- Shopify is the inventory/order authority.
+- The backend re-checks live variant price and inventory immediately before order creation.
+- The Shopify secret remains backend-only.
+- Do not delete the old Supabase catalog tables yet; they remain for backward compatibility while the project is being finalized.

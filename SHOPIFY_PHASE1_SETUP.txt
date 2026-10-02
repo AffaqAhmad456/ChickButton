@@ -1,0 +1,53 @@
+CHICKBUTTON - SHOPIFY PHASE 1 (READ-ONLY CATALOG API)
+
+WHAT CHANGED
+- Added ChickButton-Backend/lib/shopify.ts
+- Added GET /api/shopify/products
+- Added Shopify variables to backend .env.example
+- Existing frontend UI, routes, cart, wishlist, auth, checkout and Supabase flows were not changed.
+- Existing public caddie/ngrok setup was not changed.
+
+REQUIRED BACKEND ENV (.env.local)
+SHOPIFY_SHOP=sr1nn2-wm
+SHOPIFY_CLIENT_ID=<your client id>
+SHOPIFY_CLIENT_SECRET=<your client secret>
+SHOPIFY_API_VERSION=2026-10
+
+Existing values must remain, including:
+CUSTOMER_ORIGIN=https://caddie-unlearned-author.ngrok-free.dev
+COOKIE_SECURE=true
+
+RUN
+1) Backend terminal:
+   cd ChickButton-Backend
+   npm install
+   npm run dev
+
+2) Customer terminal:
+   cd ChickButton-Customer
+   npm install
+   npm run dev
+
+3) Public tunnel terminal:
+   ngrok http --url=caddie-unlearned-author.ngrok-free.dev 5173
+
+TEST LOCALLY
+Open:
+http://localhost:5173/api/shopify/products
+
+TEST PUBLICLY
+Open:
+https://caddie-unlearned-author.ngrok-free.dev/api/shopify/products
+
+EXPECTED RESPONSE
+- source: shopify
+- count
+- products
+- filters.collections
+- filters.sizes
+- filters.colors
+
+IMPORTANT
+This phase DOES NOT replace the visible frontend catalog yet. It only adds the safe backend Shopify catalog endpoint. This keeps the current cart/order/Supabase flow untouched while we verify normalized Shopify data first.
+
+Never put SHOPIFY_CLIENT_SECRET in the Vite/customer .env and never expose it in browser code.

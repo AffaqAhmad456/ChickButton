@@ -1,0 +1,48 @@
+CHICKBUTTON SHOPIFY PHASE 3 - SAFE TEST ORDER
+
+Purpose
+-------
+This phase adds ONLY a temporary backend test endpoint for creating one real Shopify order.
+It does NOT change the customer checkout UI or the existing Supabase order flow yet.
+
+New endpoint
+------------
+POST /api/shopify/test-order
+
+Required Shopify scopes
+-----------------------
+read_products
+read_inventory
+write_orders
+
+The order is created with inventoryBehaviour = DECREMENT_OBEYING_POLICY.
+No order receipt or fulfillment email is sent by this test endpoint.
+
+PowerShell test
+---------------
+Use a REAL Shopify ProductVariant GID from /api/shopify/products.
+
+$body = @{
+  shopifyVariantId = "gid://shopify/ProductVariant/REAL_ID"
+  quantity = 1
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:3000/api/shopify/test-order" `
+  -ContentType "application/json" `
+  -Body $body |
+  ConvertTo-Json -Depth 12
+
+Expected result
+---------------
+- ok = true
+- Shopify order id/name returned
+- inventory.before and inventory.after returned
+- inventory.after should normally be one lower for quantity 1 when the variant tracks inventory and policy allows the claim
+- order should appear in Shopify Admin > Orders
+
+IMPORTANT
+---------
+This creates a REAL Shopify order and can decrement REAL Shopify inventory.
+Use a test product/variant only.

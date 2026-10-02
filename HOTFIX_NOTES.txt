@@ -1,0 +1,7 @@
+ChickButton hotfix
+
+Fixed:
+1. shopifyVariantForSize ReferenceError by moving the shared helper to module scope so CartDrawer/ProductPage can access it.
+2. Guest /api/auth/me no longer returns 401; it returns HTTP 200 with user:null/profile:null. Header/login checks now inspect data.user, removing repeated expected 401 noise for guest visitors.
+
+No UI redesign or commerce-flow changes were made.

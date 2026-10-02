@@ -1,0 +1,19 @@
+CHICKBUTTON - SHOPIFY HARDENING UPDATE
+
+1) Run ChickButton-Backend/sql/09_checkout_hardening.sql in Supabase SQL Editor once.
+2) Copy your existing Shopify credentials into ChickButton-Backend/.env.local.
+3) Start backend: npm run dev (port 3000).
+4) Start customer: npm run dev (port 5173).
+5) Start ngrok on the same caddie domain.
+
+Included fixes:
+- Out-of-stock product + size states from live Shopify inventory.
+- Catalog refresh after successful checkout so sold-out stock updates without a full browser restart.
+- Pakistani local phone numbers (03XXXXXXXXX) are normalized to +92 automatically.
+- Checkout request key prevents repeat clicks/retries from creating another order after the first local order is saved.
+- Lightweight session catalog cache + background refresh for faster perceived loading.
+- Animated API loading indicator and order spinner.
+- Lazy/async product images and reduced expensive hover rendering.
+- All Shopify product media are kept; product detail shows 2 thumbnails initially and a Show more control for additional images.
+
+No visual redesign was made.

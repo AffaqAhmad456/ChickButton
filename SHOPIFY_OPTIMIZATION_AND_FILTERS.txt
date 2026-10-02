@@ -1,0 +1,15 @@
+ChickButton Shopify optimization + filtering update
+
+What changed
+- Existing UI/layout preserved.
+- Boys/Girls section links continue to combine with sidebar filters (example: Boys + Formal => Boys Formal products).
+- Garment filters within Category use OR; seasonal flags (Summer/Winter/New Arrivals/Sale) combine as AND constraints when more than one is selected.
+- Shopify catalog starts fetching immediately behind the intro splash.
+- Intro splash now appears on each hard website visit, giving the first catalog request/image warm-up time to complete.
+- First visible product images are warmed/preloaded.
+- Product cards fade images in over a shimmer instead of visibly popping in.
+- Secondary hover images are not requested until the user actually hovers/focuses a card.
+- Shop renders 12 products initially, then progressively reveals 8 more as the user nears the bottom. A compact loading bar occupies the next grid slot.
+- Existing out-of-stock, order, cart, auth, Shopify, Supabase, caddie, and checkout behavior is preserved.
+
+No new SQL migration is required for this update. Keep the previously-run 09_checkout_hardening.sql migration.

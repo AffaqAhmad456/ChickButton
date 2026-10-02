@@ -1,0 +1,76 @@
+CHICKBUTTON - SHOPIFY PHASE 2A CART MIGRATION
+============================================
+
+WHAT CHANGED
+- Shopify catalog endpoint from Phase 1 is unchanged.
+- Existing frontend/UI is unchanged.
+- Existing Supabase catalog cart path is still supported.
+- /api/cart now ALSO supports Shopify ProductVariant GIDs.
+- Guest Shopify cart lines stay in the existing HttpOnly cb_guest_cart cookie.
+- Signed-in Shopify cart lines are persisted in Supabase cart_items using new Shopify ID columns.
+- Shopify price, availability, and inventory are re-read from Shopify when Shopify cart lines are added/updated/loaded.
+
+IMPORTANT
+This is intentionally backward compatible. The visible storefront still uses the old catalog until Phase 2B.
+Do NOT delete the old products/product_variants tables yet.
+Do NOT test checkout with a manually-created Shopify cart line yet; Shopify order migration is Phase 3.
+
+1) SUPABASE MIGRATION
+Open Supabase -> SQL Editor and run:
+ChickButton-Backend/sql/07_shopify_cart_migration.sql
+
+This migration is additive and does not delete current data.
+
+2) ENVIRONMENT
+In ChickButton-Backend/.env.local keep your real values:
+SHOPIFY_SHOP=sr1nn2-wm
+SHOPIFY_CLIENT_ID=...
+SHOPIFY_CLIENT_SECRET=...
+SHOPIFY_API_VERSION=2026-10
+CUSTOMER_ORIGIN=https://caddie-unlearned-author.ngrok-free.dev
+COOKIE_SECURE=true
+
+3) START SERVERS
+Terminal 1:
+cd ChickButton-Backend
+npm install
+npm run dev
+
+Terminal 2:
+cd ChickButton-Customer
+npm install
+npm run dev
+
+Terminal 3:
+ngrok http --url=caddie-unlearned-author.ngrok-free.dev 5173
+
+4) VERIFY OLD WEBSITE FLOW FIRST
+Open the website and verify the current cart still works normally.
+The existing frontend still sends slug + size, so this proves backward compatibility.
+
+5) TEST SHOPIFY GUEST CART WITHOUT CHANGING THE UI
+First open:
+http://localhost:3000/api/shopify/products
+Copy ONE variants[].id value. It looks like:
+gid://shopify/ProductVariant/123456789
+
+PowerShell (replace the ID):
+$variant = "gid://shopify/ProductVariant/REPLACE_ME"
+$body = @{ shopifyVariantId = $variant; quantity = 1 } | ConvertTo-Json
+Invoke-WebRequest -Method Post -Uri "http://localhost:3000/api/cart" -ContentType "application/json" -Body $body -SessionVariable cb
+Invoke-RestMethod -Method Get -Uri "http://localhost:3000/api/cart" -WebSession $cb | ConvertTo-Json -Depth 12
+
+Expected Shopify cart row:
+source = shopify
+shopify_variant_id = gid://shopify/ProductVariant/...
+product_variants.products.title = real Shopify product title
+product_variants.price = current Shopify price
+product_variants.inventory_quantity = current Shopify stock
+
+6) PUBLIC URL
+Phase 2A keeps the same caddie architecture:
+https://caddie-unlearned-author.ngrok-free.dev
+/api continues through Vite -> localhost:3000.
+
+NEXT PHASE
+After old cart regression + Shopify guest/signed-in cart tests pass, Phase 2B switches the visible Home/Shop/Product pages from hard-coded products to /api/shopify/products without redesigning the UI.

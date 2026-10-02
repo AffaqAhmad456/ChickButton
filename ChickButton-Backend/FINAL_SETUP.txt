@@ -1,0 +1,2 @@
+Use the root START_HERE.txt for the final setup steps.
+Database reset query: sql/06_full_reset_shopify_categories.sql

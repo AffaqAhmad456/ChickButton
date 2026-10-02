@@ -1,0 +1,10 @@
+{
+  "description": "Converts and organizes content into markdown files for easy editing and sharing, ideal for writers and developers seeking streamlined documentation.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

@@ -1,0 +1,111 @@
+CHICKBUTTON — FINAL CUSTOMER BUILD
+=================================
+
+This package contains:
+1) ChickButton-Customer  (React + Vite, port 5173)
+2) ChickButton-Backend   (Next.js API, port 3000)
+
+There is NO admin website in this build.
+
+STEP 1 — RESET SUPABASE
+-----------------------
+Open Supabase > SQL Editor > New query.
+Open:
+  ChickButton-Backend/sql/06_full_reset_shopify_categories.sql
+Copy the entire file, paste it into Supabase and click Run.
+
+IMPORTANT:
+- This intentionally removes ALL existing Auth users.
+- It clears carts, wishlist, addresses, orders, old products and categories.
+- It removes old admin-only wallet/policies/functions.
+- It seeds 38 testing products (2 for each requested category/type).
+- Every product size is seeded with stock.
+
+STEP 2 — CLEAR OLD BROWSER COOKIES
+----------------------------------
+Chrome > F12 > Application > Cookies.
+Delete old ChickButton cookies for localhost/ngrok, especially:
+  cb_customer_access
+  cb_customer_refresh
+  cb_guest_cart
+Then reload the site.
+
+STEP 3 — BACKEND ENV
+--------------------
+The included ChickButton-Backend/.env.local is already configured for the current Supabase project and caddie ngrok domain.
+If your ngrok public hostname changes later, update CUSTOMER_ORIGIN.
+
+STEP 4 — CUSTOMER ENV
+---------------------
+ChickButton-Customer/.env intentionally has:
+  VITE_API_BASE_URL=
+This makes the customer app use /api through Vite's local proxy.
+
+STEP 5 — START BACKEND
+----------------------
+Open terminal 1:
+  cd ChickButton-Backend
+  npm install
+  npm run dev
+
+Backend should be available at:
+  http://localhost:3000
+
+Keep this terminal running.
+
+STEP 6 — START CUSTOMER
+-----------------------
+Open terminal 2:
+  cd ChickButton-Customer
+  npm install
+  npm run dev
+
+Customer should be available at:
+  http://localhost:5173
+
+Keep this terminal running.
+
+STEP 7 — START NGROK
+--------------------
+Open terminal 3.
+For the reserved caddie domain use:
+  ngrok http --url=caddie-unlearned-author.ngrok-free.dev 5173
+
+If your ngrok installation does not accept --url but automatically uses the reserved domain:
+  ngrok http 5173
+
+Public buyer URL:
+  https://caddie-unlearned-author.ngrok-free.dev
+
+You only need ONE public ngrok endpoint. Vite forwards /api to the local Next.js backend on port 3000.
+
+STEP 8 — IF NGROK HOSTNAME CHANGES
+----------------------------------
+Update BOTH:
+1) ChickButton-Customer/vite.config.ts
+   server.allowedHosts
+2) ChickButton-Backend/.env.local
+   CUSTOMER_ORIGIN=https://NEW-HOST.ngrok-free.dev
+
+Then restart both npm servers.
+
+FINAL FLOW
+----------
+Buyer -> ngrok public URL -> Vite :5173 -> /api proxy -> Next.js :3000 -> Supabase
+
+KEY FIXES IN THIS BUILD
+-----------------------
+- Product zoom viewer now has previous/next arrows and animated image changes.
+- Search reacts correctly to query changes and matches product names such as Cloud Pocket Set.
+- Account tabs (My Orders, Wishlist, Profile, Addresses) react correctly without stale query state.
+- New animated order-success screen shows order ID, total and payment method.
+- Logout replaces protected history and account revalidates auth on browser back/pageshow.
+- Cart quantity/amount changes are optimistic and server updates are debounced to avoid slow/wrong-looking totals.
+- Categories replaced with BABY / BOYS / GIRLS + SUMMER / WINTER / NEW ARRIVALS / SALE structure.
+- 38 testing products seeded: 2 per requested type, with real variants and stock.
+
+FINAL UI POLISH UPDATE
+- No new Supabase query is required for this update.
+- Existing database and catalog can stay exactly as they are.
+- Checkout now shows contact/shipping details only, then a confirmation popup with order summary before placement.
+- Cart item hover, login/signup typography, route top positioning and route transitions were polished.

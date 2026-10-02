@@ -1,0 +1,22 @@
+ChickButton FINAL UI Update
+
+No database changes are required for this update.
+Do NOT run a new Supabase SQL query if your current catalog/database is already working.
+
+Updated customer UI:
+- Checkout page now shows contact + shipping details only.
+- Clicking Review & place order opens a smooth confirmation modal with items, sizes, quantities, delivery details and totals.
+- Order is only created after Confirm order is pressed.
+- Cart rows have subtle hover/quantity-button interactions.
+- Login/signup field text is normal-weight, with small trust indicators and cleaner professional polish.
+- Every routed page now opens at the top of the page instead of keeping the previous scroll position.
+- Page changes have a short route-enter transition without full-page reload behavior.
+
+Run:
+1) Backend: npm install && npm run dev
+2) Customer: npm install && npm run dev
+3) ngrok: ngrok http --url=caddie-unlearned-author.ngrok-free.dev 5173
+
+Backend: http://localhost:3000
+Customer: http://localhost:5173
+Public: https://caddie-unlearned-author.ngrok-free.dev

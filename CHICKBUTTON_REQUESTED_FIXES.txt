@@ -1,0 +1,10 @@
+ChickButton requested fixes
+
+1. Delivery rates now come from Shopify draftOrderAvailableDeliveryOptions using the already-approved read_draft_orders scope. Cart shows delivery calculated at checkout; checkout fetches the Shopify rate only after an address is available; order creation recalculates the rate server-side.
+2. Removed the fake subtotal>=10000 10% bag discount. Product sale pricing uses Shopify variant price + compareAtPrice. Cart/checkout display Shopify sale savings without subtracting the same saving twice.
+3. Signup no longer stores a login session. Successful signup redirects to Login; Login then redirects to Account.
+4. WhatsApp now targets 03234021100 as international wa.me number 923234021100.
+5. Chickbutton786@gmail.com added as clickable mailto in Our Story, Contact, and footer.
+6. Account overview wishlist count now matches visible wishlist state; failed optimistic wishlist writes roll back. Account order stat is labelled Total orders and Recent orders is labelled Latest 3 orders to avoid the previous count/preview mismatch.
+
+No catalog caching, filtering, search, sorting, product fetching, or performance optimization logic was intentionally changed.
