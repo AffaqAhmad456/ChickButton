@@ -6,6 +6,10 @@ export const dynamic = "force-dynamic"
 export const OPTIONS = options
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV !== "development") {
+    return json(request, { error: "Not found." }, 404)
+  }
+
   try {
     const body = await request.json().catch(() => ({}))
     const variantId = String(body.shopifyVariantId || "").trim()
