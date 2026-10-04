@@ -2,6 +2,7 @@ import { createContext, memo, useContext, useEffect, useMemo, useRef, useState }
 import { createBrowserRouter, RouterProvider, Link, useLocation, useNavigate } from "react-router"
 import "./index.css"
 import logo from "./assets/chickbutton-logo.png"
+import heroLifestyle from "./assets/chickbutton-hero-lifestyle.jpg"
 import { api } from "./api"
 import { deriveSectionAndCategory, getFacets, matchesCategorySelection, matchesSection } from "./catalogFacets"
 
@@ -747,7 +748,7 @@ function CatalogProvider({ children }: { children: React.ReactNode }) {
   const refresh = async () => {
     try {
       const data = await api(`/api/shopify/products?limit=100`)
-      const mapped = (data.products || []).map(mapShopifyProduct)
+      const mapped: Product[] = (data.products || []).map(mapShopifyProduct)
       setProducts(mapped)
       setError(mapped.length ? "" : "No active Shopify products were returned.")
       lastRefresh.current = Date.now()
@@ -759,7 +760,7 @@ function CatalogProvider({ children }: { children: React.ReactNode }) {
         image.src = shopifyImg(product.image, 640)
       })
       if ("requestIdleCallback" in window) (window as any).requestIdleCallback(warm, { timeout: 700 })
-      else window.setTimeout(warm, 0)
+      else globalThis.setTimeout(warm, 0)
       try {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), products: data.products || [] }))
       } catch {}
@@ -1050,14 +1051,66 @@ function CartDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 const authCache: { value: boolean | null; promise: Promise<boolean> | null } = { value: null, promise: null }
 
+const categoryGroups = [
+  { title: "BABY", items: ["Baby Boys", "Baby Girls", "Baby Sets", "Baby Frocks"], facet: "baby" },
+  { title: "BOYS", items: ["Sets", "Shirts", "Pants", "Formal", "Traditional"], facet: "boysSection" },
+  { title: "GIRLS", items: ["Sets", "Shirts", "Pants", "Frocks", "Formal", "Traditional"], facet: "girlsSection" },
+] as const
+const seasonalCategories = ["Summer", "Winter", "New Arrivals", "Sale"] as const
+const categoryPath = (group: string, item: string) => group === "BABY"
+  ? `/shop?category=${encodeURIComponent(item)}`
+  : `/shop?section=${encodeURIComponent(group)}&category=${encodeURIComponent(item)}`
+const seasonalCategoryPath = (item: string) => item === "New Arrivals" ? "/shop?new=1" : item === "Sale" ? "/shop?sale=1" : `/shop?category=${encodeURIComponent(item)}`
+
 function Header() {
   const { cartCount } = useStore()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [shopCategoriesOpen, setShopCategoriesOpen] = useState(false)
   const [cartOpen, setCartOpen] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const mobileShopRef = useRef<HTMLButtonElement>(null)
+  const drawerCloseRef = useRef<HTMLButtonElement>(null)
+  const menuPanelRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const location = useLocation()
+  const shopParams = new URLSearchParams(location.search)
+  const saleActive = location.pathname === "/shop" && shopParams.get("sale") === "1"
+  const newActive = location.pathname === "/shop" && !saleActive && shopParams.get("new") === "1"
+  const navItems = [
+    { label: "Home", to: "/", active: location.pathname === "/", kind: "" },
+    { label: "Shop", to: "/shop", active: location.pathname === "/shop" && !saleActive && !newActive, kind: "" },
+    { label: "Categories", to: "/categories", active: location.pathname === "/categories", kind: "" },
+    { label: "New Arrivals", to: "/shop?new=1", active: newActive, kind: "new" },
+    { label: "Sale", to: "/shop?sale=1", active: saleActive, kind: "sale" },
+  ]
+  const path = location.pathname
+  const headerMode = path === "/cart" ? "cart"
+    : path === "/checkout" ? "checkout"
+    : path === "/order-success" ? "success"
+    : path === "/account" ? "account"
+    : path === "/wishlist" ? "wishlist"
+    : path.startsWith("/info/") ? "info"
+    : path === "/shop" || path === "/categories" || path.startsWith("/product/") ? "shop"
+    : "home"
+  const showMenu = headerMode === "home" || headerMode === "shop" || headerMode === "info"
+  const showMainNav = showMenu
+  const showMobileNav = headerMode === "home" || headerMode === "shop"
+  const menuNavItems = headerMode === "info" ? navItems.slice(0, 3) : navItems
+
+  const closeMenu = (restoreFocus = true) => {
+    const focusTarget = shopCategoriesOpen ? mobileShopRef.current || menuButtonRef.current : menuButtonRef.current
+    setMenuOpen(false)
+    setShopCategoriesOpen(false)
+    if (restoreFocus) window.requestAnimationFrame(() => focusTarget?.focus())
+  }
+
+  const openShopCategories = () => {
+    setShopCategoriesOpen(true)
+    setMenuOpen(true)
+  }
 
   useEffect(() => {
     if (authCache.value !== null) { setAuthenticated(authCache.value); return }
@@ -1069,10 +1122,34 @@ function Header() {
 
   useEffect(() => {
     if (!menuOpen) return
-    const close = (event: KeyboardEvent) => event.key === "Escape" && setMenuOpen(false)
+    drawerCloseRef.current?.focus()
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { closeMenu(); return }
+      if (event.key !== "Tab") return
+      const panel = menuPanelRef.current
+      if (!panel) return
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
     window.addEventListener("keydown", close)
     return () => window.removeEventListener("keydown", close)
-  }, [menuOpen])
+  }, [menuOpen, shopCategoriesOpen])
+
+  useEffect(() => {
+    if (!menuOpen || !shopCategoriesOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [menuOpen, shopCategoriesOpen])
 
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" }).catch(() => null); authCache.value = null; authCache.promise = null
@@ -1086,66 +1163,105 @@ function Header() {
     event.preventDefault()
     const q = searchTerm.trim()
     if (!q) return
-    setSearchOpen(false)
     navigate(`/shop?q=${encodeURIComponent(q)}`)
   }
 
   return (
     <>
-      <div className="bg-[#123e70] px-4 py-2 text-center text-[11px] font-bold tracking-[.14em] text-white">
-        FREE DELIVERY ON ORDERS OVER PKR 4,000 <span className="ml-4 text-[#ffd34e]">•</span> EASY 7-DAY EXCHANGE
+      <div className="cb-announcement">
+        <span>FREE DELIVERY ON ORDERS OVER PKR 4,000</span><span className="cb-announcement-dot" aria-hidden="true">•</span><span>EASY 7-DAY EXCHANGE</span>
       </div>
-      <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-20 max-w-[1380px] items-center justify-between px-5 lg:px-8">
-          <Brand />
-          <nav className="hidden items-center gap-7 text-sm font-bold text-slate-700 lg:flex">
-            <Link to="/">Home</Link>
-            <Link to="/shop">Shop</Link>
-            <Link to="/categories">Categories</Link>
-            <Link to="/shop?new=1">New Arrivals</Link>
-            <Link className="text-rose-500" to="/shop?sale=1">Sale</Link>
-          </nav>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button onClick={() => setSearchOpen((value) => !value)} className="icon-button" aria-label="Search">⌕</button>
-            <Link className="icon-button hidden sm:inline-flex" to="/wishlist" aria-label="Wishlist">♡</Link>
-            <Link className="icon-button hidden sm:inline-flex" to={authenticated ? "/account" : "/login"} aria-label="Account">♙</Link>
-            <button className="icon-button relative" onClick={() => setCartOpen(true)} aria-label={`Open cart with ${cartCount} items`}>
-              ▱{cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
-            </button>
-            <button type="button" onClick={() => setMenuOpen(true)} className="icon-button" aria-label="Open menu" aria-expanded={menuOpen} aria-controls="store-menu">☰</button>
+      <header className={`cb-site-header cb-site-header--${headerMode}${showMenu ? "" : " cb-site-header--compact"}`}>
+        <div className="cb-header-inner">
+          <div className="cb-header-left">
+            {showMenu && <button ref={menuButtonRef} type="button" onClick={() => { setShopCategoriesOpen(false); setMenuOpen(true) }} className="cb-header-icon cb-menu-button" aria-label="Open menu" aria-expanded={menuOpen} aria-controls="store-menu">
+              <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 9h22M5 16h22M5 23h22" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>
+            </button>}
+            {headerMode === "cart" && <Link className="cb-header-context-link" to="/shop"><span className="cb-context-long">← Continue shopping</span><span className="cb-context-short">← Shop</span></Link>}
+            {headerMode === "checkout" && <Link className="cb-header-context-link" to="/cart"><span className="cb-context-long">← Back to Cart</span><span className="cb-context-short">← Cart</span></Link>}
+            {headerMode === "success" && <Link className="cb-header-context-link" to="/shop"><span className="cb-context-long">← Continue shopping</span><span className="cb-context-short">← Shop</span></Link>}
+            {headerMode === "wishlist" && <Link className="cb-header-context-link" to="/shop">← Shop</Link>}
+            {headerMode === "account" && <div className="cb-header-context-links"><Link className="cb-header-context-link" to="/">Home</Link><Link className="cb-header-context-link" to="/shop">Shop</Link></div>}
+          </div>
+          <Link to="/" className="cb-header-brand" aria-label="ChickButton home">
+            <img src={logo} alt="ChickButton — Little Styles, Big Smiles" />
+          </Link>
+          <div className="cb-header-actions">
+            {headerMode === "shop" && <form onSubmit={submitSearch} className="cb-header-search" role="search">
+              <label className="sr-only" htmlFor="cb-product-search">Search products</label>
+              <input id="cb-product-search" ref={searchInputRef} value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search for kids fashion, outfits & more..." />
+              <button type="submit" aria-label="Search products">
+                <svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><circle cx="12.5" cy="12.5" r="8" stroke="currentColor" strokeWidth="1.8" /><path d="m18.5 18.5 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+              </button>
+            </form>}
+            <div className="cb-header-controls">
+              {headerMode === "shop" && <Link className="cb-header-action cb-wishlist-action" to="/wishlist" aria-label="Wishlist">
+                <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 27s-11-6.7-11-14.4a6.3 6.3 0 0 1 11-4.1 6.3 6.3 0 0 1 11 4.1C27 20.3 16 27 16 27Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>
+                <span className="cb-header-action-label">Wish</span>
+              </Link>}
+              {(headerMode === "shop" || headerMode === "wishlist" || headerMode === "cart") && <Link className="cb-header-action cb-account-action" to={authenticated ? "/account" : "/login"} aria-label={authenticated ? "Account" : "Log in"}>
+                <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="10" r="5" stroke="currentColor" strokeWidth="2" /><path d="M6 27c.8-6 4.4-9 10-9s9.2 3 10 9H6Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>
+                {headerMode === "shop" && <span className="cb-header-action-label" aria-hidden="true">Account</span>}
+              </Link>}
+              {(headerMode === "shop" || headerMode === "wishlist" || headerMode === "account") && <button type="button" className="cb-header-action cb-cart-action" onClick={() => setCartOpen(true)} aria-label={`Open cart with ${cartCount} items`}>
+                <svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="M4 6h4l3.2 18h18l3-13H10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="14" cy="29" r="2" stroke="currentColor" strokeWidth="2" /><circle cx="27" cy="29" r="2" stroke="currentColor" strokeWidth="2" /></svg>
+                <span className="cb-cart-count">{cartCount}</span>
+                {headerMode === "shop" && <span className="cb-header-action-label" aria-hidden="true">Cart</span>}
+              </button>}
+            </div>
+            {headerMode === "checkout" && <span className="cb-header-status">Secure Checkout</span>}
           </div>
         </div>
+        {showMainNav && <nav className="cb-header-nav" aria-label="Primary navigation">
+          {menuNavItems.map(({ label, to, active, kind }) => (
+            <Link
+              key={label}
+              to={to}
+              aria-current={active ? "page" : undefined}
+              className={`cb-header-nav-link relative inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border px-4 py-2 text-[.82rem] font-extrabold tracking-[.02em]${kind ? ` cb-header-nav-${kind}` : ""}${active ? " is-active" : ""}`}
+            >{label}</Link>
+          ))}
+        </nav>}
+        {showMobileNav && <nav className="cb-mobile-nav" aria-label="Mobile store navigation">
+          {navItems.map(({ label, to, active, kind }) => label === "Shop" ? (
+            <button ref={mobileShopRef} key={label} type="button" onClick={openShopCategories} aria-expanded={menuOpen && shopCategoriesOpen} aria-controls="store-menu" className={`cb-mobile-nav-link${active ? " is-active" : ""}`}>{label}</button>
+          ) : (
+            <Link key={label} to={to} aria-current={active ? "page" : undefined} className={`cb-mobile-nav-link${kind ? ` cb-mobile-nav-${kind}` : ""}${active ? " is-active" : ""}`}>{label}</Link>
+          ))}
+        </nav>}
       </header>
 
-      <div className={`header-search ${searchOpen ? "is-open" : ""}`}>
-        <form onSubmit={submitSearch} className="header-search-inner">
-          <span aria-hidden="true">⌕</span>
-          <input autoFocus={searchOpen} value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search dresses, toys, colours..." aria-label="Search products" />
-          <button type="submit">Search</button>
-          <button type="button" aria-label="Close search" onClick={() => setSearchOpen(false)}>×</button>
-        </form>
-      </div>
-
-      <div id="store-menu" className={`store-menu-layer ${menuOpen ? "is-open" : ""}`} aria-hidden={!menuOpen}>
-        <button className="store-menu-scrim" onClick={() => setMenuOpen(false)} aria-label="Close menu" tabIndex={menuOpen ? 0 : -1} />
-        <nav className="store-menu-panel" aria-label="Store menu">
+      {showMenu && <div id="store-menu" className={`store-menu-layer ${menuOpen ? "is-open" : ""}`} aria-hidden={!menuOpen}>
+        <button className="store-menu-scrim" onClick={() => closeMenu()} aria-label="Close menu" tabIndex={-1} />
+        <div ref={menuPanelRef} className="store-menu-panel" role="dialog" aria-modal="true" aria-label={shopCategoriesOpen ? "Shop categories" : "Store menu"}>
           <div className="drawer-head">
-            <div><p className="eyebrow">Menu</p><h2>ChickButton</h2></div>
-            <button className="drawer-close" type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu">×</button>
+            <div><p className="eyebrow">{shopCategoriesOpen ? "Explore" : "Menu"}</p><h2>{shopCategoriesOpen ? "Shop Categories" : "ChickButton"}</h2></div>
+            <button ref={drawerCloseRef} className="drawer-close" type="button" onClick={() => closeMenu()} aria-label={shopCategoriesOpen ? "Close shop categories" : "Close menu"}>×</button>
           </div>
-          <div className="store-menu-links text-sm font-bold">
-            <Link to="/" onClick={() => setMenuOpen(false)}>Home</Link>
-            <Link to="/shop" onClick={() => setMenuOpen(false)}>Shop all</Link>
-            <Link to="/categories" onClick={() => setMenuOpen(false)}>Categories</Link>
-            <Link to="/shop?new=1" onClick={() => setMenuOpen(false)}>New arrivals</Link>
-            <Link to="/shop?sale=1" onClick={() => setMenuOpen(false)} className="text-rose-500">Sale</Link>
-            <button type="button" onClick={() => { setMenuOpen(false); setSearchOpen(true) }}>Search</button>
-            <Link to="/wishlist" onClick={() => setMenuOpen(false)}>Wishlist</Link>
-            <Link to={authenticated ? "/account" : "/login"} onClick={() => setMenuOpen(false)}>{authenticated ? "My account" : "Log in (optional)"}</Link>
-            {authenticated ? <button type="button" onClick={logout}>Log out</button> : <Link to="/signup" onClick={() => setMenuOpen(false)}>Create account</Link>}
-          </div>
-        </nav>
-      </div>
+          {shopCategoriesOpen ? <nav className="cb-shop-drawer-content" aria-label="Shop category links">
+            <Link to={navItems[1].to} onClick={() => closeMenu(false)} className="cb-shop-drawer-all">View All Shop <span aria-hidden="true">→</span></Link>
+            {categoryGroups.map((group) => <section className="cb-shop-drawer-group" key={group.title}>
+              <h3>{group.title}</h3>
+              {group.items.map((item) => <Link key={`${group.title}-${item}`} to={categoryPath(group.title, item)} onClick={() => closeMenu(false)}>{item}<span aria-hidden="true">→</span></Link>)}
+            </section>)}
+            <section className="cb-shop-drawer-group">
+              <h3>SEASONAL</h3>
+              {seasonalCategories.map((item) => <Link key={item} to={seasonalCategoryPath(item)} onClick={() => closeMenu(false)}>{item}<span aria-hidden="true">→</span></Link>)}
+            </section>
+          </nav> : <nav className="store-menu-links text-sm font-bold" aria-label="Store navigation">
+            {menuNavItems.map(({ label, to, active, kind }) => label === "Shop" ? <span className="cb-menu-shop-pair" key={label}>
+              <Link to={to} onClick={() => closeMenu(false)} aria-current={active ? "page" : undefined} className={`cb-menu-nav-link cb-menu-shop-desktop${active ? " is-active" : ""}`}>{label}</Link>
+              <button type="button" onClick={openShopCategories} aria-expanded={shopCategoriesOpen} aria-controls="store-menu" className={`cb-menu-nav-link cb-menu-shop-mobile${active ? " is-active" : ""}`}>{label}</button>
+            </span> : <Link key={label} to={to} onClick={() => closeMenu(false)} aria-current={active ? "page" : undefined} className={`cb-menu-nav-link${kind === "sale" ? " cb-menu-sale" : ""}${active ? " is-active" : ""}`}>{label}</Link>)}
+            {headerMode === "shop" && <>
+              <button type="button" onClick={() => { closeMenu(false); window.requestAnimationFrame(() => searchInputRef.current?.focus()) }}>Search</button>
+              <Link to="/wishlist" onClick={() => closeMenu(false)}>Wishlist</Link>
+              <Link to={authenticated ? "/account" : "/login"} onClick={() => closeMenu(false)}>{authenticated ? "My account" : "Log in (optional)"}</Link>
+              {authenticated ? <button type="button" onClick={logout}>Log out</button> : <Link to="/signup" onClick={() => closeMenu(false)}>Create account</Link>}
+            </>}
+          </nav>}
+        </div>
+      </div>}
 
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
     </>
@@ -1370,49 +1486,22 @@ function Home() {
   return (
     <Layout>
       <main>
-        <section className="hero-grid overflow-hidden bg-[#e7f3f8]">
-          <div className="hero-copy relative z-10 flex flex-col justify-center px-6 py-16 sm:px-10 lg:px-16 xl:pl-[max(6vw,5rem)]">
-            <p className="eyebrow">Made for little moments</p>
-            <h1 className="hero-title">
-              Little styles.
-              <br />
-              <em>Big smiles.</em>
-            </h1>
-            <p className="mt-6 max-w-md text-base leading-7 text-slate-600">
+        <section className="cb-home-hero" aria-labelledby="cb-home-title">
+          <img className="cb-hero-photo" src={heroLifestyle} alt="Two smiling children in comfortable clothes among daisies" fetchPriority="high" decoding="async" />
+          <div className="cb-hero-copy">
+            <p className="cb-hero-eyebrow">Made for little moments</p>
+            <h1 id="cb-home-title" className="cb-hero-title">Little styles.<br /><em>Big smiles.</em></h1>
+            <p className="cb-hero-description">
               Beautifully comfortable pieces for childhood's brightest days —
               designed to play, twirl and grow with them.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/shop" className="button-primary">
+            <div className="cb-hero-actions">
+              <Link to="/shop?new=1" className="button-primary cb-hero-button cb-hero-primary">
                 Shop new arrivals <span>→</span>
               </Link>
-              <Link to="/categories" className="button-secondary">
+              <Link to="/categories" className="button-secondary cb-hero-button cb-hero-secondary">
                 Explore collections
               </Link>
-            </div>
-            <div className="mt-12 flex gap-7 text-sm">
-              <div>
-                <strong className="block text-lg text-[#123e70]">4.9/5</strong>
-                <span className="text-slate-500">Loved by parents</span>
-              </div>
-              <div className="border-l border-[#b7d7e6] pl-7">
-                <strong className="block text-lg text-[#123e70]">7 days</strong>
-                <span className="text-slate-500">Easy exchanges</span>
-              </div>
-            </div>
-          </div>
-          <div className="hero-image relative min-h-[420px] overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1602030028438-4cf153cbae9e?auto=format&fit=crop&w=1300&q=88"
-              alt="Child in a sunny yellow outfit"
-            />
-            <span className="float-sticker top-[15%] left-[10%]">✦</span>
-            <span className="float-sticker bottom-[16%] right-[14%] bg-[#f6bd31] text-[#123e70]">
-              ♥
-            </span>
-            <div className="hero-label">
-              <span>New season</span>
-              <strong>Spring / Summer ’26</strong>
             </div>
           </div>
         </section>
@@ -1581,6 +1670,17 @@ function Shop() {
   const [visibleCount, setVisibleCount] = useState(12)
   const [loadingMore, setLoadingMore] = useState(false)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  // Match the existing single-column Shop breakpoint; keep Category open on desktop.
+  const [openFilterGroups, setOpenFilterGroups] = useState<Record<string, boolean>>(
+    () => ({ Category: !window.matchMedia("(max-width: 1000px)").matches }),
+  )
+  useEffect(() => {
+    const breakpoint = window.matchMedia("(max-width: 1000px)")
+    const resetOpenGroups = () => setOpenFilterGroups({ Category: !breakpoint.matches })
+    resetOpenGroups()
+    breakpoint.addEventListener("change", resetOpenGroups)
+    return () => breakpoint.removeEventListener("change", resetOpenGroups)
+  }, [location.key])
   // Initialise straight from the URL so a link like /shop?section=BOYS&category=Formal never flashes unfiltered products.
   const [filters, setFilters] = useState<Record<string, string[]>>(() => filtersFromUrl(location.search))
 
@@ -1642,7 +1742,7 @@ function Shop() {
       if (words.length) {
         const haystack = [
           product.name,
-          product.slug.replaceAll("-", " "),
+          product.slug.replace(/-/g, " "),
           product.section,
           product.category,
           product.colorName,
@@ -1715,8 +1815,11 @@ function Shop() {
           <aside className="filter-panel">
             <strong>Filter by</strong>
             {Object.keys(options).map((group) => (
-              <details key={group} open={group === "Category"}>
-                <summary>{group}<span>⌄</span></summary>
+              <details key={group} open={Boolean(openFilterGroups[group])}>
+                <summary onClick={(event) => {
+                  event.preventDefault()
+                  setOpenFilterGroups((current) => ({ ...current, [group]: !current[group] }))
+                }}>{group}<span>⌄</span></summary>
                 <div className="filter-list">
                   {options[group].map((value) => (
                     <label key={value}>
@@ -1909,38 +2012,20 @@ function ProductPage() {
 
 function Categories() {
   const { products, loading: catalogLoading, error: catalogError } = useCatalog()
-  const groups = [
-    {
-      title: "BABY",
-      items: ["Baby Boys", "Baby Girls", "Baby Sets", "Baby Frocks"],
-      image: products.find((p) => getFacets(p).baby)?.image || products[0]?.image || "",
-    },
-    {
-      title: "BOYS",
-      items: ["Sets", "Shirts", "Pants", "Formal", "Traditional"],
-      image: products.find((p) => getFacets(p).boysSection)?.image || products[0]?.image || "",
-    },
-    {
-      title: "GIRLS",
-      items: ["Sets", "Shirts", "Pants", "Frocks", "Formal", "Traditional"],
-      image: products.find((p) => getFacets(p).girlsSection)?.image || products[0]?.image || "",
-    },
-  ]
-  const seasonal = ["Summer", "Winter", "New Arrivals", "Sale"]
   return (
     <Layout>
       <main className="page-pad py-10">
         <p className="eyebrow">Find their thing</p>
         <h1 className="page-title">Shop by collection.</h1>
         <div className="mt-10 grid gap-6 lg:grid-cols-3">
-          {groups.map((group) => (
+          {categoryGroups.map((group) => (
             <section className="category-group-card" key={group.title}>
-              <img src={group.image} alt={group.title} />
+              <img src={products.find((p) => getFacets(p)[group.facet])?.image || products[0]?.image || ""} alt={group.title} />
               <div>
                 <p className="eyebrow">{group.title}</p>
                 <div className="category-link-stack">
                   {group.items.map((item) => (
-                    <Link key={`${group.title}-${item}`} to={group.title === "BABY" ? `/shop?category=${encodeURIComponent(item)}` : `/shop?section=${encodeURIComponent(group.title)}&category=${encodeURIComponent(item)}`}>
+                    <Link key={`${group.title}-${item}`} to={categoryPath(group.title, item)}>
                       {item}<span>→</span>
                     </Link>
                   ))}
@@ -1950,8 +2035,8 @@ function Categories() {
           ))}
         </div>
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {seasonal.map((item) => (
-            <Link key={item} className="season-category-card" to={item === "New Arrivals" ? "/shop?new=1" : item === "Sale" ? "/shop?sale=1" : `/shop?category=${encodeURIComponent(item)}`}>
+          {seasonalCategories.map((item) => (
+            <Link key={item} className="season-category-card" to={seasonalCategoryPath(item)}>
               <strong>{item}</strong><span>Explore →</span>
             </Link>
           ))}
@@ -2076,6 +2161,8 @@ function Checkout() {
   const { refresh: refreshCatalog } = useCatalog()
   const navigate = useNavigate()
   const [form, setForm] = useState({ fullName: "", phone: "", addressLine: "", area: "", city: "", province: "", postalCode: "" })
+  const [email, setEmail] = useState("")
+  const emailEdited = useRef(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -2091,6 +2178,7 @@ function Checkout() {
     void api("/api/account")
       .then((data) => {
         const address = (data.addresses || []).find((item: any) => item.is_default) || data.addresses?.[0]
+        if (!emailEdited.current && data.user?.email) setEmail(data.user.email)
         setForm((current) => ({
           ...current,
           fullName: address?.full_name || data.profile?.full_name || current.fullName,
@@ -2164,7 +2252,7 @@ function Checkout() {
 
   return (
     <Layout>
-      <main className="page-pad py-10">
+      <main className="page-pad py-10 cb-checkout-page">
         <p className="crumb">Cart / Checkout</p>
         <h1 className="page-title">One step closer.</h1>
         <div className="checkout-contact-wrap mt-8">
@@ -2195,6 +2283,7 @@ function Checkout() {
               <Field label="Full name" placeholder="Your full name" value={form.fullName} onChange={set("fullName")} />
               <Field label="Phone number" placeholder="03XX XXXXXXX" type="tel" value={form.phone} onChange={set("phone")} />
             </div>
+            <Field label="Email address" placeholder="you@example.com" type="email" value={email} onChange={(value) => { emailEdited.current = true; setEmail(value) }} />
             <h2 className="mt-8">Shipping address</h2>
             <Field label="Address" placeholder="House / street / landmark" value={form.addressLine} onChange={set("addressLine")} />
             <div className="form-grid">
