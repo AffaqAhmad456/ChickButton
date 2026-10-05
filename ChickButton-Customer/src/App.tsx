@@ -1,5 +1,5 @@
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from "react"
-import { createBrowserRouter, RouterProvider, Link, useLocation, useNavigate } from "react-router"
+import { createBrowserRouter, RouterProvider, Link, useLocation, useNavigate, useParams } from "react-router"
 import "./index.css"
 import logo from "./assets/chickbutton-logo.png"
 import heroLifestyle from "./assets/chickbutton-hero-lifestyle.jpg"
@@ -2645,7 +2645,7 @@ function AddressBook({ addresses, onSaved }: { addresses: any[]; onSaved: (addre
 }
 
 function InfoPage() {
-  const key = window.location.pathname.split("/").pop() || ""
+  const { page: key = "" } = useParams()
   const pages: Record<string, { title: string; text: string; email?: string }> = {
     "size-guide": { title: "Size Guide", text: "Choose the age and size shown on each product. If your child is between sizes, choose the larger size for extra room." },
     shipping: { title: "Shipping", text: "Orders are prepared carefully and delivery details are shown during checkout." },
