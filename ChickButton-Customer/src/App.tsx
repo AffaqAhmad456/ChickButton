@@ -6,6 +6,75 @@ import heroLifestyle from "./assets/chickbutton-hero-lifestyle.jpg"
 import { api } from "./api"
 import { deriveSectionAndCategory, getFacets, matchesCategorySelection, matchesSection } from "./catalogFacets"
 
+type FooterLink = { label: string; href: string }
+type SiteContent = {
+  announcement: { primary: string; secondary: string }
+  help: FooterLink[]
+  company: FooterLink[]
+}
+
+const fallbackSiteContent: SiteContent = {
+  announcement: {
+    primary: "FREE DELIVERY ON ORDERS OVER PKR 4,000",
+    secondary: "EASY 7-DAY EXCHANGE",
+  },
+  help: [
+    { label: "Size Guide", href: "/info/size-guide" },
+    { label: "Shipping", href: "/info/shipping" },
+    { label: "Returns", href: "/info/returns" },
+    { label: "Contact", href: "/info/contact" },
+  ],
+  company: [
+    { label: "Our Story", href: "/info/our-story" },
+    { label: "Privacy Policy", href: "/info/privacy" },
+    { label: "Terms & Conditions", href: "/info/terms" },
+    { label: "Careers", href: "/info/careers" },
+  ],
+}
+
+const SiteContentContext = createContext<SiteContent>(fallbackSiteContent)
+const useSiteContent = () => useContext(SiteContentContext)
+
+function SiteContentProvider({ children }: { children: React.ReactNode }) {
+  const [content, setContent] = useState<SiteContent>(fallbackSiteContent)
+
+  useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        const data = await api("/api/shopify/site-content")
+        if (!active) return
+        const links = (value: unknown, fallback: FooterLink[]): FooterLink[] => {
+          if (!Array.isArray(value)) return fallback
+          const valid = value.flatMap((item) => typeof item?.title === "string" && typeof item?.url === "string"
+            ? [{ label: item.title, href: item.url }]
+            : [])
+          return value.length && !valid.length ? fallback : valid
+        }
+        setContent({
+          announcement: {
+            primary: typeof data?.announcement?.primary === "string" && data.announcement.primary.trim()
+              ? data.announcement.primary : fallbackSiteContent.announcement.primary,
+            secondary: typeof data?.announcement?.secondary === "string" && data.announcement.secondary.trim()
+              ? data.announcement.secondary : fallbackSiteContent.announcement.secondary,
+          },
+          help: links(data?.help, fallbackSiteContent.help),
+          company: links(data?.company, fallbackSiteContent.company),
+        })
+      } catch {
+        if (active) setContent(fallbackSiteContent)
+      }
+    }
+    const onVisible = () => { if (document.visibilityState === "visible") void refresh() }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 60_000)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible) }
+  }, [])
+
+  return <SiteContentContext.Provider value={content}>{children}</SiteContentContext.Provider>
+}
+
 type ShopifyProductVariant = {
   id: string
   size: string
@@ -1064,6 +1133,7 @@ const seasonalCategoryPath = (item: string) => item === "New Arrivals" ? "/shop?
 
 function Header() {
   const { cartCount } = useStore()
+  const { announcement } = useSiteContent()
   const [menuOpen, setMenuOpen] = useState(false)
   const [shopCategoriesOpen, setShopCategoriesOpen] = useState(false)
   const [cartOpen, setCartOpen] = useState(false)
@@ -1169,7 +1239,7 @@ function Header() {
   return (
     <>
       <div className="cb-announcement">
-        <span>FREE DELIVERY ON ORDERS OVER PKR 4,000</span><span className="cb-announcement-dot" aria-hidden="true">•</span><span>EASY 7-DAY EXCHANGE</span>
+        <span>{announcement.primary}</span><span className="cb-announcement-dot" aria-hidden="true">•</span><span>{announcement.secondary}</span>
       </div>
       <header className={`cb-site-header cb-site-header--${headerMode}${showMenu ? "" : " cb-site-header--compact"}`}>
         <div className="cb-header-inner">
@@ -1268,13 +1338,13 @@ function Header() {
   )
 }
 
-function FooterColumn({ title, links }: { title: string; links: { label: string; href: string }[] }) {
+function FooterColumn({ title, links }: { title: string; links: FooterLink[] }) {
   return (
     <div>
       <h3 className="mb-4 text-sm font-extrabold text-[#ffd34e]">{title}</h3>
       <ul className="space-y-3 text-sm text-blue-100">
         {links.map((link) => (
-          <li key={link.label}>
+          <li key={`${link.label}-${link.href}`} className="break-words">
             {link.href.startsWith("/") ? <Link to={link.href}>{link.label}</Link> : <a href={link.href}>{link.label}</a>}
           </li>
         ))}
@@ -1283,6 +1353,7 @@ function FooterColumn({ title, links }: { title: string; links: { label: string;
   )
 }
 function Footer() {
+  const { help, company } = useSiteContent()
   return (
     <footer className="mt-20 bg-[#0e315b] px-5 pb-8 pt-16 text-white">
       <div className="mx-auto grid max-w-[1280px] gap-10 md:grid-cols-[1.5fr_repeat(3,1fr)]">
@@ -1307,11 +1378,11 @@ function Footer() {
         />
         <FooterColumn
           title="Help"
-          links={[{ label: "Size Guide", href: "/info/size-guide" }, { label: "Shipping", href: "/info/shipping" }, { label: "Returns", href: "/info/returns" }, { label: "Contact", href: "/info/contact" }]}
+          links={help}
         />
         <FooterColumn
           title="Company"
-          links={[{ label: "Our Story", href: "/info/our-story" }, { label: "Privacy Policy", href: "/info/privacy" }, { label: "Terms & Conditions", href: "/info/terms" }, { label: "Careers", href: "/info/careers" }]}
+          links={company}
         />
       </div>
       <div className="mx-auto mt-14 flex max-w-[1280px] flex-wrap justify-between gap-3 border-t border-white/15 pt-6 text-xs text-blue-200">
@@ -2752,9 +2823,11 @@ export default function App() {
   return (
     <CatalogProvider>
       <StoreProvider>
-        <IntroSplash />
-        <RouterProvider router={router} />
-        <WhatsAppButton />
+        <SiteContentProvider>
+          <IntroSplash />
+          <RouterProvider router={router} />
+          <WhatsAppButton />
+        </SiteContentProvider>
       </StoreProvider>
     </CatalogProvider>
   )

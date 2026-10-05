@@ -493,6 +493,7 @@ main { animation:pageIn .28s cubic-bezier(.22,1,.36,1) both; }
 
 /* Reference-led customer header and home hero. Other shopping sections retain their styles. */
 .cb-announcement { display:flex; min-height:33px; align-items:center; justify-content:center; gap:.8rem; background:#154a7c; padding:.35rem 1rem; color:#fff; text-align:center; font-size:.68rem; font-weight:900; letter-spacing:.13em; line-height:1.25; }
+.cb-announcement span { min-width:0; overflow-wrap:anywhere; }
 .cb-announcement-dot { color:#f6bf2e; font-size:1rem; line-height:0; }
 .cb-site-header { position:sticky; top:0; z-index:40; border-bottom:1px solid #dfe9ed; background:#fffdfa; box-shadow:0 2px 10px #123e7008; }
 .cb-header-inner { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; column-gap:1.5rem; max-width:1600px; min-height:120px; margin:auto; padding:0 clamp(1.25rem,2.6vw,2.75rem); }
