@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { createContext, createElement, Fragment, memo, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { createBrowserRouter, RouterProvider, Link, useLocation, useNavigate, useParams } from "react-router"
 import "./index.css"
 import logo from "./assets/chickbutton-logo.png"
@@ -9,11 +9,14 @@ import { deriveSectionAndCategory, getFacets, matchesCategorySelection, matchesS
 type FooterLink = { label: string; href: string }
 type PromotionImage = { url: string; width: number; height: number; alt: string | null }
 type HomePromotion = { image: PromotionImage; mobileImage: PromotionImage | null; alt: string; link: string | null }
+type PolicyPageKey = "privacy" | "returns" | "terms" | "shipping"
+type SitePolicies = Record<PolicyPageKey, string | null>
 type SiteContent = {
   announcement: { primary: string; secondary: string }
   help: FooterLink[]
   company: FooterLink[]
   homePromotion: HomePromotion | null
+  policies: SitePolicies
 }
 
 const fallbackSiteContent: SiteContent = {
@@ -34,6 +37,7 @@ const fallbackSiteContent: SiteContent = {
     { label: "Careers", href: "/info/careers" },
   ],
   homePromotion: null,
+  policies: { privacy: null, returns: null, terms: null, shipping: null },
 }
 
 const SiteContentContext = createContext<SiteContent>(fallbackSiteContent)
@@ -80,6 +84,12 @@ function SiteContentProvider({ children }: { children: React.ReactNode }) {
             alt: typeof promo?.alt === "string" && promo.alt.trim() ? promo.alt.trim() : image.alt || "ChickButton promotion",
             link,
           } : null,
+          policies: {
+            privacy: typeof data?.policies?.privacy === "string" && data.policies.privacy.trim() ? data.policies.privacy : null,
+            returns: typeof data?.policies?.returns === "string" && data.policies.returns.trim() ? data.policies.returns : null,
+            terms: typeof data?.policies?.terms === "string" && data.policies.terms.trim() ? data.policies.terms : null,
+            shipping: typeof data?.policies?.shipping === "string" && data.policies.shipping.trim() ? data.policies.shipping : null,
+          },
         })
       } catch {
         if (active) setContent(fallbackSiteContent)
@@ -2694,8 +2704,46 @@ function AddressBook({ addresses, onSaved }: { addresses: any[]; onSaved: (addre
   )
 }
 
+function renderPolicyHtml(html: string): React.ReactNode[] | null {
+  try {
+    const document = new DOMParser().parseFromString(html, "text/html")
+    document.body.querySelectorAll("script,style,iframe,object,embed,svg,math,form,input,button,textarea,select,img,video,audio")
+      .forEach((element) => element.remove())
+    if (!document.body.textContent?.trim()) return null
+
+    const safeTags = new Set(["div", "p", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "strong", "b", "em", "i", "u", "blockquote", "br"])
+    const renderNode = (node: ChildNode, key: string): React.ReactNode => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent
+      if (node.nodeType !== Node.ELEMENT_NODE) return null
+      const element = node as HTMLElement
+      const tag = element.tagName.toLowerCase()
+      const children = Array.from(element.childNodes).map((child, index) => renderNode(child, `${key}-${index}`))
+      if (tag === "a") {
+        const rawHref = element.getAttribute("href")?.trim()
+        if (rawHref) {
+          try {
+            const url = new URL(rawHref, window.location.href)
+            if (["https:", "http:", "mailto:", "tel:"].includes(url.protocol)) {
+              const external = ["https:", "http:"].includes(url.protocol) && url.origin !== window.location.origin
+              return <a key={key} href={url.href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined}>{children}</a>
+            }
+          } catch { /* Invalid links remain readable text. */ }
+        }
+        return <Fragment key={key}>{children}</Fragment>
+      }
+      if (tag === "h1") return <h2 key={key}>{children}</h2>
+      if (safeTags.has(tag)) return createElement(tag, { key }, ...children)
+      return <Fragment key={key}>{children}</Fragment>
+    }
+    return Array.from(document.body.childNodes).map((node, index) => renderNode(node, `policy-${index}`))
+  } catch {
+    return null
+  }
+}
+
 function InfoPage() {
   const { page: key = "" } = useParams()
+  const { policies } = useSiteContent()
   const pages: Record<string, { title: string; text: string; email?: string }> = {
     "size-guide": { title: "Size Guide", text: "Choose the age and size shown on each product. If your child is between sizes, choose the larger size for extra room." },
     shipping: { title: "Shipping", text: "Orders are prepared carefully and delivery details are shown during checkout." },
@@ -2708,7 +2756,10 @@ function InfoPage() {
     "order-placed": { title: "Order confirmed", text: "Thank you. Your order has been placed successfully. Keep your phone available in case the delivery team needs to contact you." },
   }
   const page = pages[key] || pages["our-story"]
-  return <Layout><main className="mx-auto min-h-[55vh] max-w-[900px] px-5 py-16 lg:px-8"><p className="eyebrow">ChickButton</p><h1 className="page-title">{page.title}</h1><p className="mt-6 max-w-2xl text-base leading-8 text-slate-600">{page.text}</p>{page.email && <a className="text-link mt-4 inline-block" href={`mailto:${page.email}`}>{page.email}</a>}<br /><Link className="button-primary mt-8 inline-flex" to="/">Back home →</Link></main></Layout>
+  const policyHtml = (["privacy", "returns", "terms", "shipping"] as PolicyPageKey[]).includes(key as PolicyPageKey)
+    ? policies[key as PolicyPageKey] : null
+  const policyContent = useMemo(() => policyHtml ? renderPolicyHtml(policyHtml) : null, [policyHtml])
+  return <Layout><main className="mx-auto min-h-[55vh] max-w-[900px] px-5 py-16 lg:px-8"><p className="eyebrow">ChickButton</p><h1 className="page-title">{page.title}</h1>{policyContent ? <div className="cb-policy-body mt-6 max-w-2xl text-base leading-8 text-slate-600">{policyContent}</div> : <p className="mt-6 max-w-2xl text-base leading-8 text-slate-600">{page.text}</p>}{page.email && <a className="text-link mt-4 inline-block" href={`mailto:${page.email}`}>{page.email}</a>}<br /><Link className="button-primary mt-8 inline-flex" to="/">Back home →</Link></main></Layout>
 }
 
 function PasswordField({

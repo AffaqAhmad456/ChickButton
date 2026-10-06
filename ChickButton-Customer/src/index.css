@@ -709,3 +709,15 @@ main { animation:pageIn .28s cubic-bezier(.22,1,.36,1) both; }
   .cb-mobile-nav { padding-inline:.35rem; }
   .cb-mobile-nav-link { font-size:.62rem; }
 }
+
+/* Shopify policy bodies use the existing info-page layout and typography. */
+.cb-policy-body { min-width:0; overflow-wrap:anywhere; }
+.cb-policy-body :is(p,ul,ol,blockquote) { margin:0 0 1rem; }
+.cb-policy-body :is(h2,h3,h4,h5,h6) { margin:1.5rem 0 .6rem; color:#123e70; font-size:1.15rem; font-weight:850; line-height:1.4; }
+.cb-policy-body :is(ul,ol) { padding-left:1.5rem; }
+.cb-policy-body ul { list-style:disc; }
+.cb-policy-body ol { list-style:decimal; }
+.cb-policy-body li { margin:.3rem 0; }
+.cb-policy-body a { color:#123e70; text-decoration:underline; }
+.cb-policy-body a:hover { color:#e3a40a; }
+.cb-policy-body > :last-child { margin-bottom:0; }

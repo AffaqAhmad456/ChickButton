@@ -8,11 +8,13 @@ export type HomePromotion = {
   alt: string
   link: string | null
 }
+export type SitePolicies = Record<"privacy" | "returns" | "terms" | "shipping", string | null>
 export type SiteContent = {
   announcement: { primary: string | null; secondary: string | null }
   help: SiteLink[] | null
   company: SiteLink[] | null
   homePromotion: HomePromotion | null
+  policies: SitePolicies
 }
 
 type MenuItem = { title: string; type: string; url: string | null }
@@ -30,6 +32,31 @@ type ContentQuery = {
     promoLink: { value: string } | null
   }
   menus: { nodes: Menu[] }
+}
+type PolicyQuery = {
+  shop: {
+    shopPolicies: Array<{ type: string; body: string }>
+  }
+}
+
+const emptyPolicies = (): SitePolicies => ({ privacy: null, returns: null, terms: null, shipping: null })
+
+function normalizePolicies(policies: PolicyQuery["shop"]["shopPolicies"]): SitePolicies {
+  const normalized = emptyPolicies()
+  const routes: Record<string, keyof SitePolicies> = {
+    PRIVACY_POLICY: "privacy",
+    REFUND_POLICY: "returns",
+    TERMS_OF_SERVICE: "terms",
+    SHIPPING_POLICY: "shipping",
+  }
+  for (const policy of policies) {
+    const route = routes[policy.type]
+    const body = typeof policy.body === "string" ? policy.body.trim() : ""
+    if (route && body.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/gi, " ").trim()) {
+      normalized[route] = body
+    }
+  }
+  return normalized
 }
 
 const HELP_HANDLE = "chickbutton-help"
@@ -148,6 +175,15 @@ export async function getSiteContent(): Promise<SiteContent> {
       nodes { handle items { title type url } }
     }
   }`)
+  let policies = emptyPolicies()
+  try {
+    const policyData = await shopifyGraphQL<PolicyQuery>(`query ChickButtonPolicies {
+      shop { shopPolicies { type body } }
+    }`)
+    policies = normalizePolicies(policyData.shop.shopPolicies)
+  } catch {
+    // Policy access or availability must not take down announcement, menus, or the homepage promo.
+  }
   const menus = data.menus.nodes
   return {
     announcement: {
@@ -157,5 +193,6 @@ export async function getSiteContent(): Promise<SiteContent> {
     help: normalizeMenu(menus.find((menu) => menu.handle === HELP_HANDLE)),
     company: normalizeMenu(menus.find((menu) => menu.handle === COMPANY_HANDLE)),
     homePromotion: homePromotion(data.shop),
+    policies,
   }
 }
