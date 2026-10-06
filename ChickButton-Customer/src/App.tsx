@@ -7,10 +7,13 @@ import { api } from "./api"
 import { deriveSectionAndCategory, getFacets, matchesCategorySelection, matchesSection } from "./catalogFacets"
 
 type FooterLink = { label: string; href: string }
+type PromotionImage = { url: string; width: number; height: number; alt: string | null }
+type HomePromotion = { image: PromotionImage; mobileImage: PromotionImage | null; alt: string; link: string | null }
 type SiteContent = {
   announcement: { primary: string; secondary: string }
   help: FooterLink[]
   company: FooterLink[]
+  homePromotion: HomePromotion | null
 }
 
 const fallbackSiteContent: SiteContent = {
@@ -30,6 +33,7 @@ const fallbackSiteContent: SiteContent = {
     { label: "Terms & Conditions", href: "/info/terms" },
     { label: "Careers", href: "/info/careers" },
   ],
+  homePromotion: null,
 }
 
 const SiteContentContext = createContext<SiteContent>(fallbackSiteContent)
@@ -51,6 +55,16 @@ function SiteContentProvider({ children }: { children: React.ReactNode }) {
             : [])
           return value.length && !valid.length ? fallback : valid
         }
+        const promoImage = (value: any): PromotionImage | null =>
+          typeof value?.url === "string" && value.url.startsWith("https://") &&
+          Number.isFinite(value.width) && value.width > 0 && Number.isFinite(value.height) && value.height > 0
+            ? { url: value.url, width: value.width, height: value.height, alt: typeof value.alt === "string" ? value.alt : null }
+            : null
+        const promo = data?.homePromotion
+        const image = promoImage(promo?.image)
+        const link = typeof promo?.link === "string" &&
+          ((promo.link.startsWith("/") && !promo.link.startsWith("//")) || /^https?:\/\//i.test(promo.link))
+          ? promo.link : null
         setContent({
           announcement: {
             primary: typeof data?.announcement?.primary === "string" && data.announcement.primary.trim()
@@ -60,6 +74,12 @@ function SiteContentProvider({ children }: { children: React.ReactNode }) {
           },
           help: links(data?.help, fallbackSiteContent.help),
           company: links(data?.company, fallbackSiteContent.company),
+          homePromotion: image ? {
+            image,
+            mobileImage: promoImage(promo?.mobileImage),
+            alt: typeof promo?.alt === "string" && promo.alt.trim() ? promo.alt.trim() : image.alt || "ChickButton promotion",
+            link,
+          } : null,
         })
       } catch {
         if (active) setContent(fallbackSiteContent)
@@ -1548,6 +1568,31 @@ function Collection({
 
 function Home() {
   const { products, loading: catalogLoading, error: catalogError } = useCatalog()
+  const { homePromotion } = useSiteContent()
+  const [isMobilePromo, setIsMobilePromo] = useState(() => window.matchMedia("(max-width: 640px)").matches)
+  const [readyPromoUrl, setReadyPromoUrl] = useState<string | null>(null)
+  const promoImage = isMobilePromo && homePromotion?.mobileImage ? homePromotion.mobileImage : homePromotion?.image
+  const promoUrl = promoImage?.url
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 640px)")
+    const update = () => setIsMobilePromo(media.matches)
+    media.addEventListener("change", update)
+    return () => media.removeEventListener("change", update)
+  }, [])
+
+  useEffect(() => {
+    setReadyPromoUrl(null)
+    if (!promoUrl) return
+    let active = true
+    const preload = new Image()
+    preload.onload = () => { if (active) setReadyPromoUrl(promoUrl) }
+    preload.onerror = () => { if (active) setReadyPromoUrl(null) }
+    preload.src = promoUrl
+    return () => { active = false; preload.onload = null; preload.onerror = null }
+  }, [promoUrl])
+
+  const activePromo = homePromotion && promoImage && readyPromoUrl === promoUrl
   const displayProducts = useMemo(() => {
     const favourites = products.filter((product) =>
       (product.collections || []).some((collection) => collection.trim().toLowerCase() === "fresh favourites")
@@ -1557,7 +1602,12 @@ function Home() {
   return (
     <Layout>
       <main>
-        <section className="cb-home-hero" aria-labelledby="cb-home-title">
+        {activePromo ? <section className="cb-home-promo" aria-label="Homepage promotion">
+          {homePromotion.link ? (homePromotion.link.startsWith("/")
+            ? <Link to={homePromotion.link}><img src={promoImage.url} width={promoImage.width} height={promoImage.height} alt={homePromotion.alt} fetchPriority="high" decoding="async" onError={() => setReadyPromoUrl(null)} /></Link>
+            : <a href={homePromotion.link}><img src={promoImage.url} width={promoImage.width} height={promoImage.height} alt={homePromotion.alt} fetchPriority="high" decoding="async" onError={() => setReadyPromoUrl(null)} /></a>)
+            : <img src={promoImage.url} width={promoImage.width} height={promoImage.height} alt={homePromotion.alt} fetchPriority="high" decoding="async" onError={() => setReadyPromoUrl(null)} />}
+        </section> : <section className="cb-home-hero" aria-labelledby="cb-home-title">
           <img className="cb-hero-photo" src={heroLifestyle} alt="Two smiling children in comfortable clothes among daisies" fetchPriority="high" decoding="async" />
           <div className="cb-hero-copy">
             <p className="cb-hero-eyebrow">Made for little moments</p>
@@ -1575,7 +1625,7 @@ function Home() {
               </Link>
             </div>
           </div>
-        </section>
+        </section>}
         <section className="page-pad reveal pt-20">
           <SectionTitle
             eyebrow="Dress the occasion"

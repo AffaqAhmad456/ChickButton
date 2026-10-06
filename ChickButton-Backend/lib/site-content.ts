@@ -1,16 +1,34 @@
 import { shopifyGraphQL } from "./shopify"
 
 export type SiteLink = { title: string; url: string }
+export type PromotionImage = { url: string; width: number; height: number; alt: string | null }
+export type HomePromotion = {
+  image: PromotionImage
+  mobileImage: PromotionImage | null
+  alt: string
+  link: string | null
+}
 export type SiteContent = {
   announcement: { primary: string | null; secondary: string | null }
   help: SiteLink[] | null
   company: SiteLink[] | null
+  homePromotion: HomePromotion | null
 }
 
 type MenuItem = { title: string; type: string; url: string | null }
 type Menu = { handle: string; items: MenuItem[] }
+type ImageReference = { image: { url: string; width: number | null; height: number | null; altText: string | null } | null; alt: string | null }
+type ImageMetafield = { reference: ImageReference | null } | null
 type ContentQuery = {
-  shop: { primary: { value: string } | null; secondary: { value: string } | null }
+  shop: {
+    primary: { value: string } | null
+    secondary: { value: string } | null
+    promoEnabled: { value: string } | null
+    promoImage: ImageMetafield
+    promoMobileImage: ImageMetafield
+    promoAlt: { value: string } | null
+    promoLink: { value: string } | null
+  }
   menus: { nodes: Menu[] }
 }
 
@@ -80,11 +98,51 @@ function announcementText(value: string | undefined): string | null {
   return trimmed || null
 }
 
+function promotionImage(metafield: ImageMetafield): PromotionImage | null {
+  const source = metafield?.reference
+  const image = source?.image
+  if (!image || !Number.isFinite(image.width) || !Number.isFinite(image.height) ||
+    Number(image.width) <= 0 || Number(image.height) <= 0) return null
+  try {
+    const url = new URL(image.url)
+    if (url.protocol !== "https:") return null
+    return {
+      url: url.toString(),
+      width: Number(image.width),
+      height: Number(image.height),
+      alt: image.altText?.trim() || source?.alt?.trim() || null,
+    }
+  } catch {
+    return null
+  }
+}
+
+function homePromotion(shop: ContentQuery["shop"]): HomePromotion | null {
+  if (shop.promoEnabled?.value !== "true") return null
+  const image = promotionImage(shop.promoImage)
+  if (!image) return null
+  return {
+    image,
+    mobileImage: promotionImage(shop.promoMobileImage),
+    alt: shop.promoAlt?.value.trim() || image.alt || "ChickButton promotion",
+    link: normalizeSiteContentUrl(shop.promoLink?.value || null),
+  }
+}
+
 export async function getSiteContent(): Promise<SiteContent> {
   const data = await shopifyGraphQL<ContentQuery>(`query ChickButtonSiteContent {
     shop {
       primary: metafield(namespace: "custom", key: "chickbutton_announcement_primary") { value }
       secondary: metafield(namespace: "custom", key: "chickbutton_announcement_secondary") { value }
+      promoEnabled: metafield(namespace: "custom", key: "chickbutton_home_promo_enabled") { value }
+      promoImage: metafield(namespace: "custom", key: "chickbutton_home_promo_image") {
+        reference { ... on MediaImage { alt image { url width height altText } } }
+      }
+      promoMobileImage: metafield(namespace: "custom", key: "chickbutton_home_promo_mobile_image") {
+        reference { ... on MediaImage { alt image { url width height altText } } }
+      }
+      promoAlt: metafield(namespace: "custom", key: "chickbutton_home_promo_alt") { value }
+      promoLink: metafield(namespace: "custom", key: "chickbutton_home_promo_link") { value }
     }
     menus(first: 100) {
       nodes { handle items { title type url } }
@@ -98,5 +156,6 @@ export async function getSiteContent(): Promise<SiteContent> {
     },
     help: normalizeMenu(menus.find((menu) => menu.handle === HELP_HANDLE)),
     company: normalizeMenu(menus.find((menu) => menu.handle === COMPANY_HANDLE)),
+    homePromotion: homePromotion(data.shop),
   }
 }
