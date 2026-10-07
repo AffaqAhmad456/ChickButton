@@ -1612,7 +1612,7 @@ function Home() {
   return (
     <Layout>
       <main>
-        {activePromo ? <section className="cb-home-promo" aria-label="Homepage promotion">
+        {activePromo ? <section className="cb-home-promo" aria-label="Homepage promotion" style={{ maxWidth: Math.min(1120, Math.max(320, promoImage.width / promoImage.height * 520 + 28)) }}>
           {homePromotion.link ? (homePromotion.link.startsWith("/")
             ? <Link to={homePromotion.link}><img src={promoImage.url} width={promoImage.width} height={promoImage.height} alt={homePromotion.alt} fetchPriority="high" decoding="async" onError={() => setReadyPromoUrl(null)} /></Link>
             : <a href={homePromotion.link}><img src={promoImage.url} width={promoImage.width} height={promoImage.height} alt={homePromotion.alt} fetchPriority="high" decoding="async" onError={() => setReadyPromoUrl(null)} /></a>)
