@@ -2,6 +2,7 @@ import { createContext, createElement, Fragment, memo, useContext, useEffect, us
 import { createBrowserRouter, RouterProvider, Link, useLocation, useNavigate, useParams } from "react-router"
 import "./index.css"
 import logo from "./assets/chickbutton-logo.png"
+import headerLogo from "./assets/chickbutton-logo-new.png"
 import heroLifestyle from "./assets/chickbutton-hero-lifestyle.jpg"
 import { api } from "./api"
 import { deriveSectionAndCategory, getFacets, matchesCategorySelection, matchesSection } from "./catalogFacets"
@@ -1195,6 +1196,8 @@ function Header() {
     : path.startsWith("/info/") ? "info"
     : path === "/shop" || path === "/categories" || path.startsWith("/product/") ? "shop"
     : "home"
+  const homeCommerce = path === "/"
+  const showCommerce = homeCommerce || headerMode === "shop"
   const showMenu = headerMode === "home" || headerMode === "shop" || headerMode === "info"
   const showMainNav = showMenu
   const showMobileNav = headerMode === "home" || headerMode === "shop"
@@ -1271,7 +1274,7 @@ function Header() {
       <div className="cb-announcement">
         <span>{announcement.primary}</span><span className="cb-announcement-dot" aria-hidden="true">•</span><span>{announcement.secondary}</span>
       </div>
-      <header className={`cb-site-header cb-site-header--${headerMode}${showMenu ? "" : " cb-site-header--compact"}`}>
+      <header className={`cb-site-header cb-site-header--${headerMode}${homeCommerce ? " cb-site-header--home-commerce" : ""}${showMenu ? "" : " cb-site-header--compact"}`}>
         <div className="cb-header-inner">
           <div className="cb-header-left">
             {showMenu && <button ref={menuButtonRef} type="button" onClick={() => { setShopCategoriesOpen(false); setMenuOpen(true) }} className="cb-header-icon cb-menu-button" aria-label="Open menu" aria-expanded={menuOpen} aria-controls="store-menu">
@@ -1284,10 +1287,10 @@ function Header() {
             {headerMode === "account" && <div className="cb-header-context-links"><Link className="cb-header-context-link" to="/">Home</Link><Link className="cb-header-context-link" to="/shop">Shop</Link></div>}
           </div>
           <Link to="/" className="cb-header-brand" aria-label="ChickButton home">
-            <img src={logo} alt="ChickButton — Little Styles, Big Smiles" />
+            <img src={headerLogo} alt="ChickButton — Little Styles, Big Smiles" />
           </Link>
           <div className="cb-header-actions">
-            {headerMode === "shop" && <form onSubmit={submitSearch} className="cb-header-search" role="search">
+            {showCommerce && <form onSubmit={submitSearch} className="cb-header-search" role="search">
               <label className="sr-only" htmlFor="cb-product-search">Search products</label>
               <input id="cb-product-search" ref={searchInputRef} value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search for kids fashion, outfits & more..." />
               <button type="submit" aria-label="Search products">
@@ -1295,18 +1298,18 @@ function Header() {
               </button>
             </form>}
             <div className="cb-header-controls">
-              {headerMode === "shop" && <Link className="cb-header-action cb-wishlist-action" to="/wishlist" aria-label="Wishlist">
+              {showCommerce && <Link className="cb-header-action cb-wishlist-action" to="/wishlist" aria-label="Wishlist">
                 <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 27s-11-6.7-11-14.4a6.3 6.3 0 0 1 11-4.1 6.3 6.3 0 0 1 11 4.1C27 20.3 16 27 16 27Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>
                 <span className="cb-header-action-label">Wish</span>
               </Link>}
-              {(headerMode === "shop" || headerMode === "wishlist" || headerMode === "cart") && <Link className="cb-header-action cb-account-action" to={authenticated ? "/account" : "/login"} aria-label={authenticated ? "Account" : "Log in"}>
+              {(showCommerce || headerMode === "wishlist" || headerMode === "cart") && <Link className="cb-header-action cb-account-action" to={authenticated ? "/account" : "/login"} aria-label={authenticated ? "Account" : "Log in"}>
                 <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="10" r="5" stroke="currentColor" strokeWidth="2" /><path d="M6 27c.8-6 4.4-9 10-9s9.2 3 10 9H6Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>
-                {headerMode === "shop" && <span className="cb-header-action-label" aria-hidden="true">Account</span>}
+                {showCommerce && <span className="cb-header-action-label" aria-hidden="true">Account</span>}
               </Link>}
-              {(headerMode === "shop" || headerMode === "wishlist" || headerMode === "account") && <button type="button" className="cb-header-action cb-cart-action" onClick={() => setCartOpen(true)} aria-label={`Open cart with ${cartCount} items`}>
+              {(showCommerce || headerMode === "wishlist" || headerMode === "account") && <button type="button" className="cb-header-action cb-cart-action" onClick={() => setCartOpen(true)} aria-label={`Open cart with ${cartCount} items`}>
                 <svg viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="M4 6h4l3.2 18h18l3-13H10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="14" cy="29" r="2" stroke="currentColor" strokeWidth="2" /><circle cx="27" cy="29" r="2" stroke="currentColor" strokeWidth="2" /></svg>
                 <span className="cb-cart-count">{cartCount}</span>
-                {headerMode === "shop" && <span className="cb-header-action-label" aria-hidden="true">Cart</span>}
+                {showCommerce && <span className="cb-header-action-label" aria-hidden="true">Cart</span>}
               </button>}
             </div>
             {headerMode === "checkout" && <span className="cb-header-status">Secure Checkout</span>}
