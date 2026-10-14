@@ -3,7 +3,7 @@ import { randomUUID } from "crypto"
 import { dbRequest, getSession } from "../../../lib/supabase"
 import { json, options } from "../../../lib/http"
 import { clearGuestCart, readGuestCart } from "../../../lib/guest-cart"
-import { createShopifyCheckoutOrder, getCatalogVariant, getShopifyDeliveryRate } from "../../../lib/shopify"
+import { canPurchaseVariant, createShopifyCheckoutOrder, getCatalogVariant, getShopifyDeliveryRate } from "../../../lib/shopify"
 
 export const dynamic = "force-dynamic"
 export const OPTIONS = options
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
   for (const line of rawLines) {
     const variant = await getCatalogVariant(line.shopifyVariantId).catch(() => null)
     if (!variant) return json(request, { error: "One or more products are no longer available." }, 409, session)
-    if (!variant.availableForSale || variant.inventoryQuantity < line.quantity) {
+    if (!canPurchaseVariant(variant, line.quantity)) {
       return json(request, { error: `${variant.product.title} (${variant.size}) is out of stock or has insufficient quantity.` }, 409, session)
     }
     checkedLines.push({ variantId: variant.id, quantity: line.quantity, price: variant.price, compareAtPrice: variant.compareAtPrice })

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { json, options } from "../../../../lib/http"
-import { createShopifyTestOrder, getCatalogVariant } from "../../../../lib/shopify"
+import { canPurchaseVariant, createShopifyTestOrder, getCatalogVariant } from "../../../../lib/shopify"
 
 export const dynamic = "force-dynamic"
 export const OPTIONS = options
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     const before = await getCatalogVariant(variantId)
     if (!before) return json(request, { error: "Shopify product variant was not found." }, 404)
-    if (!before.availableForSale || before.inventoryQuantity < quantity) {
+    if (!canPurchaseVariant(before, quantity)) {
       return json(request, {
         error: "Not enough stock.",
         available: before.inventoryQuantity,

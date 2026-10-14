@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { dbRequest, getSession } from "../../../lib/supabase"
 import { json, options } from "../../../lib/http"
 import { clearGuestCart, readGuestCart, writeGuestCart, type GuestCartLine } from "../../../lib/guest-cart"
-import { getCatalogVariant, type CartShopifyVariant } from "../../../lib/shopify"
+import { canPurchaseVariant, getCatalogVariant, type CartShopifyVariant } from "../../../lib/shopify"
 
 export const dynamic = "force-dynamic"
 export const OPTIONS = options
@@ -55,6 +55,7 @@ function shopifyRow(id: string, quantity: number, variant: CartShopifyVariant) {
       image_url: variant.image,
       sku: variant.sku,
       available_for_sale: variant.availableForSale,
+      inventory_limited: variant.inventoryLimited,
       shopify_variant_id: variant.id,
       products: {
         id: variant.product.id,
@@ -99,12 +100,13 @@ async function mergeGuestIntoUser(request: NextRequest, token: string, userId: s
   for (const line of guest) {
     if ("shopifyVariantId" in line && line.shopifyVariantId) {
       const variant = await getCatalogVariant(line.shopifyVariantId).catch(() => null)
-      if (!variant || !variant.availableForSale || variant.inventoryQuantity <= 0) continue
+      if (!variant || !canPurchaseVariant(variant)) continue
 
       const encodedId = encodeURIComponent(variant.id)
       const existingRes = await dbRequest(`cart_items?cart_id=eq.${cartId}&shopify_variant_id=eq.${encodedId}&select=id,quantity&limit=1`, token)
       const existing = existingRes.ok ? (await existingRes.json())[0] : null
-      const quantity = Math.min((Number(existing?.quantity) || 0) + line.quantity, variant.inventoryQuantity)
+      const requestedQuantity = (Number(existing?.quantity) || 0) + line.quantity
+      const quantity = variant.inventoryLimited ? Math.min(requestedQuantity, variant.inventoryQuantity) : requestedQuantity
 
       if (existing) {
         await dbRequest(`cart_items?id=eq.${existing.id}`, token, {
@@ -193,7 +195,7 @@ export async function POST(request: NextRequest) {
   if (body.shopifyVariantId) {
     const variant = await getCatalogVariant(String(body.shopifyVariantId)).catch(() => null)
     if (!variant) return json(request, { error: "Shopify product variant was not found." }, 404, session)
-    if (!variant.availableForSale || variant.inventoryQuantity < qty) {
+    if (!canPurchaseVariant(variant, qty)) {
       return json(request, { error: "Not enough stock." }, 400, session)
     }
 
@@ -201,7 +203,8 @@ export async function POST(request: NextRequest) {
       const lines = readGuestCart(request)
       const index = lines.findIndex((line) => "shopifyVariantId" in line && line.shopifyVariantId === variant.id)
       if (index >= 0 && "shopifyVariantId" in lines[index]) {
-        lines[index].quantity = Math.min(lines[index].quantity + qty, variant.inventoryQuantity)
+        const requestedQuantity = lines[index].quantity + qty
+        lines[index].quantity = variant.inventoryLimited ? Math.min(requestedQuantity, variant.inventoryQuantity) : requestedQuantity
       } else {
         lines.push({
           shopifyVariantId: variant.id,
@@ -224,7 +227,7 @@ export async function POST(request: NextRequest) {
     }
     const existing = (await existingRes.json())[0]
     const nextQuantity = (Number(existing?.quantity) || 0) + qty
-    if (nextQuantity > variant.inventoryQuantity) return json(request, { error: "Not enough stock." }, 400, session)
+    if (!canPurchaseVariant(variant, nextQuantity)) return json(request, { error: "Not enough stock." }, 400, session)
 
     const res = existing
       ? await dbRequest(`cart_items?id=eq.${existing.id}`, session.access_token, {
@@ -290,7 +293,7 @@ export async function PATCH(request: NextRequest) {
       let lines = readGuestCart(request)
       if (qty <= 0) lines = lines.filter((line) => !("shopifyVariantId" in line && line.shopifyVariantId === variant.id))
       else {
-        if (!variant.availableForSale || qty > variant.inventoryQuantity) return json(request, { error: "Not enough stock." }, 400, session)
+        if (!canPurchaseVariant(variant, qty)) return json(request, { error: "Not enough stock." }, 400, session)
         const index = lines.findIndex((line) => "shopifyVariantId" in line && line.shopifyVariantId === variant.id)
         if (index >= 0 && "shopifyVariantId" in lines[index]) lines[index].quantity = qty
         else lines.push({ shopifyVariantId: variant.id, shopifyProductId: variant.product.id, handle: variant.product.handle, size: variant.size, quantity: qty })
@@ -306,7 +309,7 @@ export async function PATCH(request: NextRequest) {
       const res = await dbRequest(`cart_items?${filter}`, session.access_token, { method: "DELETE" })
       if (!res.ok) return json(request, { error: "Shopify cart database migration is not installed yet." }, 503, session)
     } else {
-      if (!variant.availableForSale || qty > variant.inventoryQuantity) return json(request, { error: "Not enough stock." }, 400, session)
+      if (!canPurchaseVariant(variant, qty)) return json(request, { error: "Not enough stock." }, 400, session)
       const res = await dbRequest(`cart_items?${filter}`, session.access_token, { method: "PATCH", body: JSON.stringify({ quantity: qty, updated_at: new Date().toISOString() }) })
       if (!res.ok) return json(request, { error: "Could not update Shopify cart." }, res.status, session)
     }

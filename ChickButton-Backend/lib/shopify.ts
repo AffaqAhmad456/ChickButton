@@ -43,6 +43,8 @@ type ShopifyVariantNode = {
   compareAtPrice?: string | null
   inventoryQuantity?: number | null
   availableForSale: boolean
+  inventoryPolicy: "CONTINUE" | "DENY"
+  inventoryItem: { tracked: boolean }
   selectedOptions: ShopifySelectedOption[]
   image?: ShopifyImage | null
 }
@@ -59,7 +61,7 @@ type ShopifyProductNode = {
   tags?: string[]
   totalInventory?: number | null
   media: { nodes: ShopifyMediaNode[] }
-  variants: { nodes: ShopifyVariantNode[] }
+  variants: { nodes: ShopifyVariantNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } }
   collections: { nodes: ShopifyCollectionNode[] }
 }
 
@@ -77,6 +79,7 @@ export type CatalogVariant = {
   compareAtPrice: number | null
   inventoryQuantity: number
   availableForSale: boolean
+  inventoryLimited: boolean
   options: Record<string, string>
   image: string | null
 }
@@ -189,6 +192,14 @@ function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))]
 }
 
+export function inventoryLimited(variant: { inventoryPolicy: "CONTINUE" | "DENY"; inventoryItem: { tracked: boolean } }) {
+  return variant.inventoryItem.tracked && variant.inventoryPolicy === "DENY"
+}
+
+export function canPurchaseVariant(variant: { availableForSale: boolean; inventoryQuantity: number; inventoryLimited: boolean }, quantity = 1) {
+  return variant.availableForSale && (!variant.inventoryLimited || variant.inventoryQuantity >= quantity)
+}
+
 function normalizeProduct(product: ShopifyProductNode): CatalogProduct {
   const variants: CatalogVariant[] = product.variants.nodes.map((variant) => ({
     id: variant.id,
@@ -198,6 +209,7 @@ function normalizeProduct(product: ShopifyProductNode): CatalogProduct {
     compareAtPrice: variant.compareAtPrice ? toNumber(variant.compareAtPrice) : null,
     inventoryQuantity: Math.max(toNumber(variant.inventoryQuantity), 0),
     availableForSale: Boolean(variant.availableForSale),
+    inventoryLimited: inventoryLimited(variant),
     options: Object.fromEntries(variant.selectedOptions.map((option) => [option.name, option.value])),
     image: variant.image?.url || null,
   }))
@@ -223,13 +235,10 @@ function normalizeProduct(product: ShopifyProductNode): CatalogProduct {
     ),
   )
 
-  const availableVariants = variants.filter((variant) => variant.availableForSale)
-  const prices = (availableVariants.length ? availableVariants : variants).map((variant) => variant.price)
-  const compareAtPrices = variants
-    .map((variant) => variant.compareAtPrice)
-    .filter((value): value is number => value !== null && value > 0)
-  const price = prices.length ? Math.min(...prices) : 0
-  const compareAtPrice = compareAtPrices.length ? Math.min(...compareAtPrices) : null
+  const availableVariants = variants.filter((variant) => canPurchaseVariant(variant))
+  const cardVariant = [...(availableVariants.length ? availableVariants : variants)].sort((a, b) => a.price - b.price)[0]
+  const price = cardVariant?.price ?? 0
+  const compareAtPrice = cardVariant?.compareAtPrice ?? null
 
   return {
     id: product.id,
@@ -245,7 +254,7 @@ function normalizeProduct(product: ShopifyProductNode): CatalogProduct {
     compareAtPrice,
     onSale: Boolean(compareAtPrice && compareAtPrice > price),
     totalInventory: Math.max(toNumber(product.totalInventory), 0),
-    available: variants.some((variant) => variant.availableForSale && variant.inventoryQuantity > 0),
+    available: variants.some((variant) => canPurchaseVariant(variant)),
     images,
     collections: product.collections.nodes,
     collectionTitles: product.collections.nodes.map((collection) => collection.title),
@@ -281,6 +290,7 @@ const PRODUCTS_QUERY = `#graphql
           }
         }
         variants(first: 100) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             id
             title
@@ -289,6 +299,8 @@ const PRODUCTS_QUERY = `#graphql
             compareAtPrice
             inventoryQuantity
             availableForSale
+            inventoryPolicy
+            inventoryItem { tracked }
             selectedOptions {
               name
               value
@@ -313,6 +325,22 @@ const PRODUCTS_QUERY = `#graphql
   }
 `
 
+const MORE_VARIANTS_QUERY = `#graphql
+  query ChickButtonMoreVariants($id: ID!, $after: String!) {
+    product(id: $id) {
+      variants(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id title sku price compareAtPrice inventoryQuantity availableForSale inventoryPolicy
+          inventoryItem { tracked }
+          selectedOptions { name value }
+          image { url altText width height }
+        }
+      }
+    }
+  }
+`
+
 // Server-side catalog cache: serve instantly from memory, refresh in the background
 // (stale-while-revalidate) and share one in-flight Shopify request between visitors.
 const CATALOG_FRESH_MS = 30_000
@@ -324,8 +352,20 @@ function fetchCatalog(first: number) {
   const existing = catalogInflight.get(first)
   if (existing) return existing
   const request = shopifyGraphQL<ProductsQueryData>(PRODUCTS_QUERY, { first })
-    .then((data) => {
-      const mapped = data.products.nodes.map(normalizeProduct)
+    .then(async (data) => {
+      const complete = await Promise.all(data.products.nodes.map(async (product) => {
+        const nodes = [...product.variants.nodes]
+        let pageInfo = product.variants.pageInfo
+        while (pageInfo.hasNextPage) {
+          if (!pageInfo.endCursor) throw new Error(`Shopify variant pagination missing cursor for ${product.handle}`)
+          const next = await shopifyGraphQL<{ product: { variants: ShopifyProductNode["variants"] } | null }>(MORE_VARIANTS_QUERY, { id: product.id, after: pageInfo.endCursor })
+          if (!next.product) throw new Error(`Shopify product disappeared during variant pagination: ${product.handle}`)
+          nodes.push(...next.product.variants.nodes)
+          pageInfo = next.product.variants.pageInfo
+        }
+        return { ...product, variants: { nodes, pageInfo } }
+      }))
+      const mapped = complete.map(normalizeProduct)
       catalogCache.set(first, { at: Date.now(), data: mapped })
       return mapped
     })
@@ -355,6 +395,7 @@ export type CartShopifyVariant = {
   compareAtPrice: number | null
   inventoryQuantity: number
   availableForSale: boolean
+  inventoryLimited: boolean
   size: string
   color: string | null
   image: string | null
@@ -375,6 +416,8 @@ type VariantQueryData = {
     compareAtPrice?: string | null
     inventoryQuantity?: number | null
     availableForSale: boolean
+    inventoryPolicy: "CONTINUE" | "DENY"
+    inventoryItem: { tracked: boolean }
     selectedOptions: ShopifySelectedOption[]
     image?: ShopifyImage | null
     product: {
@@ -400,6 +443,8 @@ const VARIANT_QUERY = `#graphql
       compareAtPrice
       inventoryQuantity
       availableForSale
+      inventoryPolicy
+      inventoryItem { tracked }
       selectedOptions {
         name
         value
@@ -433,7 +478,7 @@ export async function getCatalogVariant(variantId: string): Promise<CartShopifyV
 
   const sizeOption = variant.selectedOptions.find((option) => /^(size|age)$/i.test(option.name))
   const colorOption = variant.selectedOptions.find((option) => /^colou?r$/i.test(option.name))
-  const fallbackSize = variant.title && variant.title !== "Default Title" ? variant.title : "One Size"
+  const fallbackSize = colorOption ? "One Size" : variant.title && variant.title !== "Default Title" ? variant.title : "One Size"
 
   return {
     id: variant.id,
@@ -443,6 +488,7 @@ export async function getCatalogVariant(variantId: string): Promise<CartShopifyV
     compareAtPrice: variant.compareAtPrice ? toNumber(variant.compareAtPrice) : null,
     inventoryQuantity: Math.max(toNumber(variant.inventoryQuantity), 0),
     availableForSale: Boolean(variant.availableForSale),
+    inventoryLimited: inventoryLimited(variant),
     size: sizeOption?.value && sizeOption.value !== "Default Title" ? sizeOption.value : fallbackSize,
     color: colorOption?.value && colorOption.value !== "Default Title" ? colorOption.value : null,
     image: variant.image?.url || variant.product.featuredMedia?.preview?.image?.url || null,
@@ -616,7 +662,7 @@ export async function createShopifyTestOrder(input: {
 
   const quantity = Math.max(1, Math.trunc(Number(input.quantity) || 1))
   if (!variant.availableForSale) throw new Error("This Shopify variant is not available for sale.")
-  if (variant.inventoryQuantity < quantity) {
+  if (!canPurchaseVariant(variant, quantity)) {
     throw new Error(`Not enough Shopify inventory. Available: ${variant.inventoryQuantity}.`)
   }
 
@@ -692,7 +738,7 @@ export async function createShopifyCheckoutOrder(input: {
     const quantity = Math.max(1, Math.trunc(Number(line.quantity) || 1))
     const variant = await getCatalogVariant(line.variantId)
     if (!variant) throw new Error("One or more Shopify variants no longer exist.")
-    if (!variant.availableForSale || variant.inventoryQuantity < quantity) {
+    if (!canPurchaseVariant(variant, quantity)) {
       throw new Error(`${variant.product.title} (${variant.size}) does not have enough stock.`)
     }
     validated.push({ variant, quantity })
