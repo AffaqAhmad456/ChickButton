@@ -1,8 +1,7 @@
 import { createContext, createElement, Fragment, memo, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { createBrowserRouter, RouterProvider, Link, useLocation, useNavigate, useParams } from "react-router"
 import "./index.css"
-import logo from "./assets/chickbutton-logo.png"
-import headerLogo from "./assets/chickbutton-logo-new.png"
+import logo from "./assets/chickbutton-logo-transparent.png"
 import heroLifestyle from "./assets/chickbutton-hero-lifestyle.jpg"
 import { api } from "./api"
 import { deriveSectionAndCategory, getFacets, matchesCategorySelection, matchesSection } from "./catalogFacets"
@@ -1086,10 +1085,7 @@ const toggleLike = (id: number) => {
 function Brand() {
   return (
     <Link to="/" className="flex items-center gap-2.5" aria-label="ChickButton home">
-      <img src={logo} className="h-12 w-16 object-contain object-center" alt="ChickButton" />
-      <span className="hidden text-xl font-black tracking-tight text-[#123e70] sm:block">
-        Chick<span className="text-[#eaa913]">Button</span>
-      </span>
+      <img src={logo} className="w-40 max-w-full object-contain object-left" alt="ChickButton — Little styles, Big smiles" />
     </Link>
   )
 }
@@ -1287,7 +1283,7 @@ function Header() {
             {headerMode === "account" && <div className="cb-header-context-links"><Link className="cb-header-context-link" to="/">Home</Link><Link className="cb-header-context-link" to="/shop">Shop</Link></div>}
           </div>
           <Link to="/" className="cb-header-brand" aria-label="ChickButton home">
-            <img src={headerLogo} alt="ChickButton — Little Styles, Big Smiles" />
+            <img src={logo} alt="ChickButton — Little Styles, Big Smiles" />
           </Link>
           <div className="cb-header-actions">
             {showCommerce && <form onSubmit={submitSearch} className="cb-header-search" role="search">
@@ -1394,7 +1390,7 @@ function Footer() {
           <div className="flex items-center gap-2">
             <img
               src={logo}
-              className="h-12 w-16 object-contain"
+              className="h-12 w-44 object-contain"
               alt="ChickButton"
             />
             <strong className="text-xl">ChickButton</strong>
@@ -1403,7 +1399,7 @@ function Footer() {
             Thoughtfully chosen clothes for every little chapter. Made for
             motion, magic, and muddy knees.
           </p>
-          <a className="mt-3 inline-block text-sm text-blue-100 hover:text-white" href="mailto:Chickbutton786@gmail.com">Chickbutton786@gmail.com</a>
+          <a className="mt-3 inline-block text-sm text-blue-100 hover:text-white" href="mailto:info@chickbutton.com">info@chickbutton.com</a>
         </div>
         <FooterColumn
           title="Shop"

@@ -52,7 +52,7 @@ html { scroll-behavior:smooth; } body { margin:0; background:var(--background); 
 .auth-story::before { right:-8rem; top:-7rem; height:22rem; width:22rem; border:4rem solid #f6c53618; }
 .auth-story::after { bottom:-8rem; left:-7rem; height:18rem; width:18rem; border:1px solid #ffffff20; }
 .auth-story>a,.auth-story>div,.auth-story>span { position:relative; z-index:1; }
-.auth-story img { height:4.5rem; width:6rem; border-radius:1rem; object-fit:cover; mix-blend-mode:screen; }
+.auth-story img { width:min(100%,220px); height:auto; object-fit:contain; }
 .auth-story h1 { max-width:25rem; margin:.5rem 0 1rem; font-size:clamp(2.4rem,4vw,4rem); font-weight:900; letter-spacing:-.055em; line-height:.95; }
 .auth-story p { max-width:25rem; color:#d5e7f0; line-height:1.7; }
 .auth-story>span { color:#9dc4d7; font-size:.75rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
@@ -687,11 +687,9 @@ main { animation:pageIn .28s cubic-bezier(.22,1,.36,1) both; }
   .cb-site-header--shop .cb-header-action:hover,.cb-site-header--shop .cb-header-action:active,.cb-site-header--shop .cb-header-action:hover svg { transform:none; }
 }
 
-/* Show the supplied wide logo without its surrounding blank image space. */
-.cb-header-brand { width:200px; height:54px; overflow:hidden; }
-.cb-header-brand img { object-fit:cover; object-position:center; }
-.cb-site-header--compact .cb-header-brand,.cb-site-header--info .cb-header-brand { width:180px; height:48px; }
-.cb-site-header--shop .cb-header-brand { width:200px; height:54px; }
+/* The transparent horizontal artwork needs no image crop or background blend. */
+.cb-header-brand { width:330px; height:88px; overflow:visible; }
+.cb-header-brand img { object-fit:contain; object-position:center; }
 
 /* Home reuses the existing Shop controls in a left-logo commerce layout. */
 .cb-site-header--home-commerce .cb-header-inner { grid-template-columns:minmax(0,330px) minmax(220px,1fr) auto; column-gap:clamp(1rem,2vw,2rem); }
@@ -707,30 +705,53 @@ main { animation:pageIn .28s cubic-bezier(.22,1,.36,1) both; }
 .cb-site-header--home-commerce .cb-header-action:hover { background:#edf6fa; }
 .cb-site-header--home-commerce .cb-header-action:focus-visible { outline:2px solid #174b7a; outline-offset:2px; }
 
-@media (max-width:1100px) {
-  .cb-site-header--shop .cb-header-brand { width:185px; height:50px; }
+@media (min-width:851px) {
+  .cb-site-header--compact .cb-header-inner,.cb-site-header--info .cb-header-inner { min-height:120px; }
+  .cb-site-header:not(.cb-site-header--home-commerce) .cb-header-inner { grid-template-columns:minmax(0,390px) minmax(220px,1fr) auto; column-gap:clamp(1rem,2vw,2rem); }
+  .cb-site-header:not(.cb-site-header--home-commerce) .cb-header-brand { grid-column:1; grid-row:1; justify-self:start; width:min(100%,330px); height:88px; }
+  .cb-site-header--shop .cb-header-left { grid-column:1; grid-row:1; justify-self:end; }
+  .cb-site-header--shop .cb-header-actions { display:contents; }
+  .cb-site-header--shop .cb-header-search { grid-column:2; grid-row:1; justify-self:center; width:100%; max-width:650px; }
+  .cb-site-header--shop .cb-header-controls { grid-column:3; grid-row:1; justify-self:end; }
+  .cb-site-header--compact .cb-header-left { grid-column:2; grid-row:1; justify-self:start; }
+  .cb-site-header--compact .cb-header-actions { grid-column:3; grid-row:1; justify-self:end; }
+}
+@media (min-width:851px) and (max-width:1150px) {
+  .cb-site-header--compact .cb-header-inner,.cb-site-header--info .cb-header-inner { min-height:104px; }
+}
+@media (min-width:851px) and (max-width:1100px) {
+  .cb-site-header--shop .cb-header-inner { grid-template-areas:none; grid-template-columns:minmax(0,340px) minmax(180px,1fr) auto; min-height:104px; row-gap:0; padding:0 clamp(1.25rem,2.6vw,2.75rem); }
+  .cb-site-header--shop .cb-header-left { grid-area:auto; grid-column:1; grid-row:1; justify-self:end; }
+  .cb-site-header--shop .cb-header-brand { grid-area:auto; grid-column:1; grid-row:1; justify-self:start; }
+  .cb-site-header--shop .cb-header-search { grid-area:auto; grid-column:2; grid-row:1; height:48px; }
+  .cb-site-header--shop .cb-header-controls { grid-area:auto; grid-column:3; grid-row:1; }
 }
 @media (max-width:850px) {
-  .cb-site-header--compact .cb-header-brand,.cb-site-header--info .cb-header-brand { width:155px; height:42px; }
-  .cb-site-header--home-commerce .cb-header-inner { grid-template-areas:"menu brand actions" "search search search"; grid-template-columns:auto minmax(0,1fr) auto; column-gap:.6rem; row-gap:.35rem; min-height:0; padding:.4rem 1.25rem .8rem; }
-  .cb-site-header--home-commerce .cb-header-left { display:flex; grid-area:menu; }
-  .cb-site-header--home-commerce .cb-header-brand { grid-area:brand; justify-self:start; width:clamp(175px,31vw,245px); height:clamp(46px,8vw,62px); }
-  .cb-site-header--home-commerce .cb-header-search { grid-area:search; max-width:none; min-width:0; height:44px; }
+  .cb-site-header--home-commerce .cb-header-inner,.cb-site-header--shop .cb-header-inner { grid-template-areas:"menu brand actions" "search search search"; grid-template-columns:auto minmax(0,1fr) auto; column-gap:.6rem; row-gap:.35rem; min-height:0; padding:.4rem 1.25rem .8rem; }
+  .cb-site-header--home-commerce .cb-header-left,.cb-site-header--shop .cb-header-left { display:flex; grid-area:menu; }
+  .cb-site-header--home-commerce .cb-header-brand,.cb-site-header--shop .cb-header-brand { grid-area:brand; justify-self:start; width:clamp(175px,31vw,245px); height:clamp(46px,8vw,62px); }
+  .cb-site-header--home-commerce .cb-header-search,.cb-site-header--shop .cb-header-search { grid-area:search; width:100%; max-width:none; min-width:0; height:44px; }
   .cb-site-header--home-commerce .cb-header-controls { grid-area:actions; justify-self:end; }
   .cb-site-header--home-commerce .cb-header-action { height:52px; }
+  .cb-site-header--info .cb-header-inner,.cb-site-header--compact .cb-header-inner { grid-template-areas:"left brand actions"; grid-template-columns:auto minmax(0,1fr) auto; column-gap:.6rem; min-height:0; padding:.5rem 1.25rem; }
+  .cb-site-header--info .cb-header-left,.cb-site-header--compact .cb-header-left { display:flex; grid-area:left; }
+  .cb-site-header--info .cb-header-brand,.cb-site-header--compact .cb-header-brand { grid-area:brand; justify-self:start; width:clamp(175px,31vw,245px); height:clamp(46px,8vw,62px); }
+  .cb-site-header--info .cb-header-actions,.cb-site-header--compact .cb-header-actions { grid-area:actions; justify-self:end; }
+  .cb-context-long { display:none; }
+  .cb-context-short { display:inline; }
 }
 @media (max-width:640px) {
-  .cb-site-header--shop .cb-header-brand { width:160px; height:44px; }
-  .cb-site-header--compact .cb-header-brand,.cb-site-header--info .cb-header-brand { width:130px; height:38px; }
-  .cb-site-header--home-commerce .cb-header-inner { column-gap:.35rem; padding:.3rem .75rem .7rem; }
-  .cb-site-header--home-commerce .cb-header-brand { width:clamp(150px,45vw,190px); height:clamp(42px,12vw,50px); }
+  .cb-site-header--home-commerce .cb-header-inner,.cb-site-header--shop .cb-header-inner { column-gap:.35rem; padding:.3rem .75rem .7rem; }
+  .cb-site-header--info .cb-header-inner,.cb-site-header--compact .cb-header-inner { column-gap:.35rem; padding:.3rem .75rem; }
+  .cb-site-header--home-commerce .cb-header-brand,.cb-site-header--shop .cb-header-brand,.cb-site-header--info .cb-header-brand,.cb-site-header--compact .cb-header-brand { width:clamp(150px,45vw,190px); height:clamp(42px,12vw,50px); }
   .cb-site-header--home-commerce .cb-header-controls { gap:.15rem; }
   .cb-site-header--home-commerce .cb-header-action { width:42px; height:44px; }
   .cb-site-header--home-commerce .cb-wishlist-action { display:inline-flex; }
   .cb-site-header--home-commerce .cb-header-action-label { display:none; }
+  .cb-site-header--compact .cb-header-context-link { padding-inline:.2rem; }
 }
 @media (max-width:390px) {
-  .cb-site-header--checkout .cb-header-brand { width:105px; height:32px; }
+  .cb-site-header--checkout .cb-header-brand { width:clamp(150px,45vw,169px); height:45px; }
 }
 
 /* Mobile store destinations and the Shop view inside the existing menu drawer. */
