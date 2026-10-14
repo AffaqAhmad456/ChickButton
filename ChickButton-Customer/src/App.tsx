@@ -5,6 +5,7 @@ import logo from "./assets/chickbutton-logo-transparent.png"
 import heroLifestyle from "./assets/chickbutton-hero-lifestyle.jpg"
 import { api } from "./api"
 import { deriveSectionAndCategory, getFacets, matchesCategorySelection, matchesSection } from "./catalogFacets"
+import { firstVariantForColor, mapShopifyVariants, variantForCartLine, variantForSelection, variantSellable, type ShopifyProductVariant } from "./shopifyVariants"
 
 type FooterLink = { label: string; href: string }
 type PromotionImage = { url: string; width: number; height: number; alt: string | null }
@@ -103,16 +104,6 @@ function SiteContentProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return <SiteContentContext.Provider value={content}>{children}</SiteContentContext.Provider>
-}
-
-type ShopifyProductVariant = {
-  id: string
-  size: string
-  color: string | null
-  price: number
-  compareAtPrice: number | null
-  inventoryQuantity: number
-  availableForSale: boolean
 }
 
 type Product = {
@@ -782,25 +773,13 @@ function mapShopifyProduct(raw: any): Product {
   // Section/category come from the shared collection parser so breadcrumbs, filters and Home cards always agree.
   const { section, category } = deriveSectionAndCategory(collectionTitles)
   const rawVariants = Array.isArray(raw?.variants) ? raw.variants : []
-  const shopifyVariants: ShopifyProductVariant[] = rawVariants.map((variant: any) => {
-    const options = variant?.options || {}
-    const size = options.Size || options.size || options.Age || options.age || (variant.title && variant.title !== "Default Title" ? variant.title : "One Size")
-    const color = options.Color || options.Colour || options.color || options.colour || null
-    return {
-      id: String(variant.id),
-      size: String(size),
-      color: color ? String(color) : null,
-      price: Number(variant.price) || Number(raw.price) || 0,
-      compareAtPrice: variant.compareAtPrice && Number(variant.compareAtPrice) > 0 ? Number(variant.compareAtPrice) : null,
-      inventoryQuantity: Math.max(0, Number(variant.inventoryQuantity) || 0),
-      availableForSale: Boolean(variant.availableForSale),
-    }
-  })
+  const shopifyVariants: ShopifyProductVariant[] = mapShopifyVariants(rawVariants, Number(raw.price) || 0)
   const sizes = [...new Set(shopifyVariants.map((variant) => variant.size))]
   const colorNames = [...new Set(shopifyVariants.map((variant) => variant.color).filter(Boolean))] as string[]
-  const colorName = colorNames[0] || "Default"
+  const firstAvailableVariant = shopifyVariants.find(variantSellable)
+  const colorName = firstAvailableVariant?.color || colorNames[0] || "Default"
   const images: string[] = Array.isArray(raw?.images) ? raw.images.filter(Boolean) : []
-  const image = images[0] || "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&w=760&q=85"
+  const image = firstAvailableVariant?.image || images[0] || "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&w=760&q=85"
   return {
     id: productNumericId(String(raw.id)),
     slug: String(raw.handle || "product"),
@@ -815,7 +794,7 @@ function mapShopifyProduct(raw: any): Product {
     category,
     ages: ageGroupsFromSizes(sizes),
     sizes: sizes.length ? sizes : ["One Size"],
-    available: shopifyVariants.some((variant) => variant.availableForSale && variant.inventoryQuantity > 0),
+    available: shopifyVariants.some(variantSellable),
     totalInventory: shopifyVariants.reduce((sum, variant) => sum + Math.max(0, variant.inventoryQuantity), 0),
     images: images.length ? images : [image],
     image,
@@ -900,13 +879,13 @@ function CatalogProvider({ children }: { children: React.ReactNode }) {
   return <CatalogContext.Provider value={{ products, loading, error, refresh }}>{children}</CatalogContext.Provider>
 }
 
-type CartLine = { product: Product; quantity: number; size: string }
+type CartLine = { product: Product; quantity: number; size: string; variantId?: string }
 type Store = {
   cartItems: CartLine[]
   cartCount: number
-  add: (product?: Product, quantity?: number, size?: string) => void
-  updateQuantity: (id: number, size: string, quantity: number) => void
-  remove: (id: number, size: string) => void
+  add: (product?: Product, quantity?: number, size?: string, variantId?: string) => void
+  updateQuantity: (id: number, size: string, quantity: number, variantId?: string) => void
+  remove: (id: number, size: string, variantId?: string) => void
   liked: number[]
   toggleLike: (id: number) => void
   toast: string
@@ -923,29 +902,29 @@ function productBySlug(products: Product[], slug: string) {
 
 
 
-const shopifyVariantForSize = (product: Product, size: string) =>
-  product.shopifyVariants?.find((variant) => variant.size === size && variant.availableForSale && variant.inventoryQuantity > 0) ||
-  product.shopifyVariants?.find((variant) => variant.size === size) ||
-  product.shopifyVariants?.[0]
+const variantForLine = (line: CartLine) =>
+  variantForCartLine(line.product.shopifyVariants || [], line.size, line.variantId)
+
+const cartLineKey = (line: CartLine) => `${line.product.id}:${line.variantId || line.size}`
 
 
-function cartLinePricing(product: Product, size: string, quantity = 1) {
-  const variant = shopifyVariantForSize(product, size)
-  const currentUnit = variant?.price ?? product.price
-  const compareAtCandidate = variant?.compareAtPrice ?? product.old ?? null
+function cartLinePricing(line: CartLine) {
+  const variant = variantForLine(line)
+  const currentUnit = variant?.price ?? line.product.price
+  const compareAtCandidate = variant ? variant.compareAtPrice : line.product.old ?? null
   const originalUnit = compareAtCandidate && compareAtCandidate > currentUnit ? compareAtCandidate : currentUnit
   return {
     currentUnit,
     originalUnit,
-    currentTotal: currentUnit * quantity,
-    originalTotal: originalUnit * quantity,
-    savings: Math.max(0, (originalUnit - currentUnit) * quantity),
+    currentTotal: currentUnit * line.quantity,
+    originalTotal: originalUnit * line.quantity,
+    savings: Math.max(0, (originalUnit - currentUnit) * line.quantity),
   }
 }
 
 function cartPricing(lines: CartLine[]) {
   return lines.reduce((totals, line) => {
-    const price = cartLinePricing(line.product, line.size, line.quantity)
+    const price = cartLinePricing(line)
     totals.currentSubtotal += price.currentTotal
     totals.originalSubtotal += price.originalTotal
     totals.saleSavings += price.savings
@@ -972,7 +951,7 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
       const lines: CartLine[] = (data.items || []).flatMap((row: any) => {
         const slug = row?.product_variants?.products?.slug
         const product = productBySlug(products, slug)
-        return product ? [{ product, quantity: Number(row.quantity) || 1, size: row?.product_variants?.size || product.sizes[0] }] : []
+        return product ? [{ product, quantity: Number(row.quantity) || 1, size: row?.product_variants?.size || product.sizes[0], variantId: row?.shopify_variant_id || row?.product_variants?.shopify_variant_id || undefined }] : []
       })
       setCartItems(lines)
     } catch (error: any) {
@@ -1002,15 +981,17 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [catalogLoading, products.length])
 
 
-const add = (product?: Product, quantity = 1, size?: string) => {
+const add = (product?: Product, quantity = 1, size?: string, variantId?: string) => {
   if (!product) return
   const selectedSize = size || product.sizes[0]
-  const shopifyVariant = shopifyVariantForSize(product, selectedSize)
+  const shopifyVariant = variantForCartLine(product.shopifyVariants || [], selectedSize, variantId)
+  if (product.shopifyVariants?.length && (!shopifyVariant || !variantSellable(shopifyVariant))) return
+  const selectedId = shopifyVariant?.id
   setCartItems((items) => {
-    const line = items.find((item) => item.product.id === product.id && item.size === selectedSize)
+    const line = items.find((item) => item.product.id === product.id && (selectedId ? item.variantId === selectedId : item.size === selectedSize))
     return line
-      ? items.map((item) => item.product.id === product.id && item.size === selectedSize ? { ...item, quantity: item.quantity + quantity } : item)
-      : [...items, { product, quantity, size: selectedSize }]
+      ? items.map((item) => item === line ? { ...item, quantity: item.quantity + quantity } : item)
+      : [...items, { product, quantity, size: selectedSize, variantId: selectedId }]
   })
   const body = shopifyVariant
     ? { shopifyVariantId: shopifyVariant.id, quantity }
@@ -1023,16 +1004,18 @@ const add = (product?: Product, quantity = 1, size?: string) => {
   notify(`${product.name} · ${selectedSize} added to your bag`)
 }
 
-const updateQuantity = (id: number, size: string, quantity: number) => {
+const updateQuantity = (id: number, size: string, quantity: number, variantId?: string) => {
   const product = products.find((item) => item.id === id)
   if (!product) return
   const safeQuantity = Math.max(0, quantity)
-  const shopifyVariant = shopifyVariantForSize(product, size)
+  const shopifyVariant = variantForCartLine(product.shopifyVariants || [], size, variantId)
+  if (variantId && !shopifyVariant) { void refreshCart(); return }
+  const matches = (item: CartLine) => item.product.id === id && (variantId ? item.variantId === variantId : item.size === size)
   setCartItems((items) => safeQuantity < 1
-    ? items.filter((item) => !(item.product.id === id && item.size === size))
-    : items.map((item) => item.product.id === id && item.size === size ? { ...item, quantity: safeQuantity } : item))
+    ? items.filter((item) => !matches(item))
+    : items.map((item) => matches(item) ? { ...item, quantity: safeQuantity } : item))
 
-  const key = `${product.slug}::${size}`
+  const key = `${product.slug}::${variantId || size}`
   if (quantityTimers.current[key]) window.clearTimeout(quantityTimers.current[key])
   quantityTimers.current[key] = window.setTimeout(() => {
     const body = shopifyVariant
@@ -1047,11 +1030,12 @@ const updateQuantity = (id: number, size: string, quantity: number) => {
   }, 220)
 }
 
-const remove = (id: number, size: string) => {
+const remove = (id: number, size: string, variantId?: string) => {
   const product = products.find((item) => item.id === id)
-  setCartItems((items) => items.filter((item) => !(item.product.id === id && item.size === size)))
+  setCartItems((items) => items.filter((item) => !(item.product.id === id && (variantId ? item.variantId === variantId : item.size === size))))
   if (!product) return
-  const shopifyVariant = shopifyVariantForSize(product, size)
+  const shopifyVariant = variantForCartLine(product.shopifyVariants || [], size, variantId)
+  if (variantId && !shopifyVariant) { void refreshCart(); return }
   const url = shopifyVariant
     ? `/api/cart?shopifyVariantId=${encodeURIComponent(shopifyVariant.id)}`
     : `/api/cart?slug=${encodeURIComponent(product.slug)}&size=${encodeURIComponent(size)}`
@@ -1092,7 +1076,7 @@ function Brand() {
 
 function CartDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { cartItems, cartCount, updateQuantity, remove } = useStore()
-  const subtotal = cartItems.reduce((sum, line) => sum + line.product.price * line.quantity, 0)
+  const subtotal = cartPricing(cartItems).currentSubtotal
   useEffect(() => {
     if (!open) return
     const close = (event: KeyboardEvent) => event.key === "Escape" && onClose()
@@ -1110,24 +1094,26 @@ function CartDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
         </div>
         <div className="drawer-body">
           {cartItems.length ? (
-            cartItems.map(({ product, quantity, size }) => (
-              <div className="drawer-item" key={`${product.id}-${size}`}>
-                <img src={shopifyImg(product.image, 240)} alt={product.name} loading="lazy" decoding="async" />
+            cartItems.map((line) => {
+              const { product, quantity, size, variantId } = line
+              const variant = variantForLine(line)
+              return <div className="drawer-item" key={cartLineKey(line)}>
+                <img src={shopifyImg(variant?.image || product.image, 240)} alt={product.name} loading="lazy" decoding="async" />
                 <div className="min-w-0 flex-1">
                   <h3>{product.name}</h3>
-                  <p>Size {size} · {(shopifyVariantForSize(product, size)?.inventoryQuantity || 0) > 0 ? "In stock" : "Out of stock"}</p>
-                  <strong>{money(product.price * quantity)}</strong>
+                  <p>{variant?.color ? `${variant.color} · ` : ""}Size {size} · {(variant ? variantSellable(variant) : product.available) ? "In stock" : "Out of stock"}</p>
+                  <strong>{money(cartLinePricing(line).currentTotal)}</strong>
                   <div className="drawer-item-actions">
                     <div className="quantity compact">
-                      <button onClick={() => updateQuantity(product.id, size, quantity - 1)}>−</button>
+                      <button onClick={() => updateQuantity(product.id, size, quantity - 1, variantId)}>−</button>
                       <b>{quantity}</b>
-                      <button onClick={() => updateQuantity(product.id, size, quantity + 1)}>+</button>
+                      <button onClick={() => updateQuantity(product.id, size, quantity + 1, variantId)}>+</button>
                     </div>
-                    <button className="remove-link" onClick={() => remove(product.id, size)}>Remove</button>
+                    <button className="remove-link" onClick={() => remove(product.id, size, variantId)}>Remove</button>
                   </div>
                 </div>
               </div>
-            ))
+            })
           ) : (
             <div className="drawer-empty"><span>Bag</span><h3>Your bag is empty</h3><p>Beautiful little things are waiting.</p></div>
           )}
@@ -1488,7 +1474,7 @@ const ProductCard = memo(function ProductCard({ product, priority = false }: { p
   const [choosingSize, setChoosingSize] = useState(false)
   const [primaryLoaded, setPrimaryLoaded] = useState(false)
   const [hoverReady, setHoverReady] = useState(false)
-  const inStockSizes = new Set((product.shopifyVariants || []).filter((v) => v.availableForSale && v.inventoryQuantity > 0).map((v) => v.size))
+  const inStockSizes = new Set((product.shopifyVariants || []).filter(variantSellable).map((v) => v.size))
   const quickAdd = () => {
     if (!product.available) return
     const firstAvailable = product.sizes.find((size) => inStockSizes.has(size)) || product.sizes[0]
@@ -1526,7 +1512,7 @@ const ProductCard = memo(function ProductCard({ product, priority = false }: { p
             <div className="quick-size-head"><strong>Choose size</strong><button type="button" onClick={() => setChoosingSize(false)}>×</button></div>
             <div className="quick-size-grid">
               {product.sizes.map((size) => {
-                const available = inStockSizes.size === 0 ? product.available : inStockSizes.has(size)
+                const available = product.shopifyVariants?.length ? inStockSizes.has(size) : product.available
                 return <button key={size} disabled={!available} type="button" onClick={() => { if (available) add(product, 1, size); setChoosingSize(false) }}>{size}{!available ? " · Sold" : ""}</button>
               })}
             </div>
@@ -2013,11 +1999,9 @@ function ProductPage() {
   const p = foundProduct || fallbackProducts[0]
   const { add } = useStore()
   const galleryImages = [...new Set(((p.images?.length ? p.images : [p.image, p.image2])).filter(Boolean))]
-  const firstAvailableSize = p.sizes.find((candidate) => {
-    const variant = p.shopifyVariants?.find((item) => item.size === candidate)
-    return !variant || (variant.availableForSale && variant.inventoryQuantity > 0)
-  }) || p.sizes[0]
-  const [size, setSize] = useState(firstAvailableSize)
+  const firstAvailableVariant = p.shopifyVariants?.find(variantSellable) || p.shopifyVariants?.[0]
+  const [color, setColor] = useState<string | null>(firstAvailableVariant?.color || null)
+  const [size, setSize] = useState(firstAvailableVariant?.size || p.sizes[0])
   const [qty, setQty] = useState(1)
   const [imageIndex, setImageIndex] = useState(0)
   const [showAllThumbs, setShowAllThumbs] = useState(false)
@@ -2025,28 +2009,33 @@ function ProductPage() {
   const [zoomKey, setZoomKey] = useState(0)
 
   useEffect(() => {
-    const nextSize = p.sizes.find((candidate) => {
-      const variant = p.shopifyVariants?.find((item) => item.size === candidate)
-      return !variant || (variant.availableForSale && variant.inventoryQuantity > 0)
-    }) || p.sizes[0]
-    setSize(nextSize)
+    const nextVariant = p.shopifyVariants?.find(variantSellable) || p.shopifyVariants?.[0]
+    setColor(nextVariant?.color || null)
+    setSize(nextVariant?.size || p.sizes[0])
     setQty(1)
     setImageIndex(0)
     setShowAllThumbs(false)
   }, [p.id, p.available])
 
-  const selectedVariant = p.shopifyVariants?.find((variant) => variant.size === size)
-  const selectedAvailable = selectedVariant ? selectedVariant.availableForSale && selectedVariant.inventoryQuantity > 0 : p.available
+  const colorVariants = p.shopifyVariants?.filter((variant) => variant.color === color) || []
+  const colorSizes = p.shopifyVariants?.length ? [...new Set(colorVariants.map((variant) => variant.size))] : p.sizes
+  const selectedVariant = variantForSelection(p.shopifyVariants || [], color, size)
+  const selectedAvailable = p.shopifyVariants?.length ? Boolean(selectedVariant && variantSellable(selectedVariant)) : p.available
   const selectedStock = selectedVariant?.inventoryQuantity ?? p.totalInventory ?? 0
   const selectedPrice = selectedVariant?.price ?? p.price
-  const selectedOld = selectedVariant?.compareAtPrice && selectedVariant.compareAtPrice > selectedPrice
-    ? selectedVariant.compareAtPrice
+  const selectedOld = selectedVariant
+    ? (selectedVariant.compareAtPrice && selectedVariant.compareAtPrice > selectedPrice ? selectedVariant.compareAtPrice : undefined)
     : (p.old && p.old > selectedPrice ? p.old : undefined)
   const visibleThumbs = showAllThumbs ? galleryImages : galleryImages.slice(0, 2)
 
   useEffect(() => {
-    if (selectedStock > 0 && qty > selectedStock) setQty(selectedStock)
-  }, [selectedStock, size])
+    if (selectedVariant?.inventoryLimited && selectedStock > 0 && qty > selectedStock) setQty(selectedStock)
+  }, [selectedStock, selectedVariant?.inventoryLimited, size, color])
+
+  useEffect(() => {
+    const index = selectedVariant?.image ? galleryImages.indexOf(selectedVariant.image) : -1
+    setImageIndex(index >= 0 ? index : 0)
+  }, [selectedVariant?.id, p.id])
 
   const moveImage = (direction: -1 | 1) => {
     if (!galleryImages.length) return
@@ -2102,22 +2091,37 @@ function ProductPage() {
               {selectedOld && <span className="text-slate-400 line-through">{money(selectedOld)}</span>}
               {selectedOld && <span className="badge sale">{Math.round((1 - selectedPrice / selectedOld) * 100)}% off</span>}
             </div>
-            <p className={`stock-status ${selectedAvailable ? "in" : "out"}`}>{selectedAvailable ? (selectedStock <= 5 ? `Only ${selectedStock} left in this size` : "In stock") : "Out of stock"}</p>
+            <p className={`stock-status ${selectedAvailable ? "in" : "out"}`}>{selectedAvailable ? (selectedVariant?.inventoryLimited && selectedStock <= 5 ? `Only ${selectedStock} left in this size` : "In stock") : "Out of stock"}</p>
             <p className="mt-6 leading-7 text-slate-600">{p.description || "A thoughtfully selected piece made for everyday movement, comfort and little adventures."}</p>
-            <div className="choice"><span>Colour — <b>{p.colorName}</b></span></div>
+            <div className="choice">
+              <span>Colour — <b>{color || p.colorName}</b></span>
+              {Boolean(p.colorNames?.length) && <div className="mt-3 flex flex-wrap gap-2">
+                {p.colorNames?.map((name) => {
+                  const available = p.shopifyVariants?.some((variant) => variant.color === name && variantSellable(variant)) || false
+                  return <button type="button" aria-label={`${name}${available ? "" : " sold out"}`} aria-pressed={color === name} onClick={() => {
+                    setColor(name)
+                    const next = firstVariantForColor(p.shopifyVariants || [], name)
+                    setSize(next?.size || p.sizes[0])
+                    setQty(1)
+                  }} className={`size-button ${color === name ? "selected" : ""} ${!available ? "sold-out" : ""}`} key={name}>
+                    <span className="inline-block h-3 w-3 rounded-full align-middle ring-1 ring-slate-300" style={{ backgroundColor: colorHex(name) }} /> {name}{!available ? " · Sold" : ""}
+                  </button>
+                })}
+              </div>}
+            </div>
             <div className="choice">
               <div className="flex justify-between"><span>Size</span><Link to="/info/size-guide" className="text-link">Size guide</Link></div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {p.sizes.map((s) => {
-                  const variant = p.shopifyVariants?.find((item) => item.size === s)
-                  const available = variant ? variant.availableForSale && variant.inventoryQuantity > 0 : p.available
+                {colorSizes.map((s) => {
+                  const variant = colorVariants.find((item) => item.size === s)
+                  const available = p.shopifyVariants?.length ? Boolean(variant && variantSellable(variant)) : p.available
                   return <button disabled={!available} onClick={() => { setSize(s); setQty(1) }} className={`size-button ${size === s ? "selected" : ""} ${!available ? "sold-out" : ""}`} key={s}>{s}{!available ? " · Sold" : ""}</button>
                 })}
               </div>
             </div>
             <div className="mt-7 flex gap-3">
-              <div className="quantity"><button onClick={() => setQty(Math.max(1, qty - 1))}>−</button><b>{qty}</b><button disabled={!selectedAvailable || (selectedStock > 0 && qty >= selectedStock)} onClick={() => setQty(qty + 1)}>+</button></div>
-              <button onClick={() => selectedAvailable && add(p, qty, size)} disabled={!selectedAvailable} className="button-primary flex-1">
+              <div className="quantity"><button onClick={() => setQty(Math.max(1, qty - 1))}>−</button><b>{qty}</b><button disabled={!selectedAvailable || (selectedVariant?.inventoryLimited && qty >= selectedStock)} onClick={() => setQty(qty + 1)}>+</button></div>
+              <button onClick={() => selectedAvailable && add(p, qty, size, selectedVariant?.id)} disabled={!selectedAvailable} className="button-primary flex-1">
                 {selectedAvailable ? `Add to cart · ${money(selectedPrice * qty)}` : "Out of stock"}
               </button>
             </div>
@@ -2221,23 +2225,25 @@ function Cart() {
         <div className="cart-layout mt-8">
           <section className="space-y-4">
             {cartItems.length ? (
-              cartItems.map(({ product, quantity, size }) => {
-                const linePricing = cartLinePricing(product, size, quantity)
+              cartItems.map((line) => {
+                const { product, quantity, size, variantId } = line
+                const variant = variantForLine(line)
+                const linePricing = cartLinePricing(line)
                 return (
-                <div className="cart-item" key={`${product.id}-${size}`}>
-                  <img src={shopifyImg(product.image, 240)} alt={product.name} loading="lazy" decoding="async" />
+                <div className="cart-item" key={cartLineKey(line)}>
+                  <img src={shopifyImg(variant?.image || product.image, 240)} alt={product.name} loading="lazy" decoding="async" />
                   <div className="flex-1">
                     <h3>{product.name}</h3>
-                    <p>Size {size} · {(shopifyVariantForSize(product, size)?.inventoryQuantity || 0) > 0 ? "In stock" : "Out of stock"}</p>
+                    <p>{variant?.color ? `${variant.color} · ` : ""}Size {size} · {(variant ? variantSellable(variant) : product.available) ? "In stock" : "Out of stock"}</p>
                     <strong>{money(linePricing.currentTotal)}</strong>
                     <small>{money(linePricing.currentUnit)} each</small>
                   </div>
                   <div className="quantity">
-                    <button onClick={() => updateQuantity(product.id, size, quantity - 1)}>−</button>
+                    <button onClick={() => updateQuantity(product.id, size, quantity - 1, variantId)}>−</button>
                     <b>{quantity}</b>
-                    <button onClick={() => updateQuantity(product.id, size, quantity + 1)}>+</button>
+                    <button onClick={() => updateQuantity(product.id, size, quantity + 1, variantId)}>+</button>
                   </div>
-                  <button onClick={() => remove(product.id, size)} aria-label={`Remove ${product.name}`} className="remove-x">×</button>
+                  <button onClick={() => remove(product.id, size, variantId)} aria-label={`Remove ${product.name}`} className="remove-x">×</button>
                 </div>
                 )
               })
@@ -2326,8 +2332,9 @@ function Checkout() {
   }, [])
 
   const deliveryPayload = () => ({
-    lines: cartItems.flatMap(({ product, quantity, size }) => {
-      const variant = shopifyVariantForSize(product, size)
+    lines: cartItems.flatMap((line) => {
+      const variant = variantForLine(line)
+      const { quantity } = line
       return variant ? [{ variantId: variant.id, quantity }] : []
     }),
     address: form,
@@ -2362,7 +2369,7 @@ function Checkout() {
       void calculateDelivery().catch(() => setDeliveryQuote(null))
     }, 550)
     return () => window.clearTimeout(timer)
-  }, [form.addressLine, form.area, form.city, form.province, form.postalCode, cartItems.map((line) => `${line.product.id}:${line.size}:${line.quantity}`).join("|")])
+  }, [form.addressLine, form.area, form.city, form.province, form.postalCode, cartItems.map((line) => `${cartLineKey(line)}:${line.quantity}`).join("|")])
 
   const placeOrder = async () => {
     if (!cartItems.length || busy) return
@@ -2439,13 +2446,15 @@ function Checkout() {
             <p className="order-confirm-copy">Please review the details below. Your order will only be placed after you press confirm.</p>
 
             <div className="confirm-items">
-              {cartItems.map(({ product, quantity, size }) => (
-                <div className="confirm-item" key={`${product.id}-${size}`}>
-                  <img src={shopifyImg(product.image, 240)} alt="" loading="lazy" decoding="async" />
-                  <div><strong>{product.name}</strong><span>Size {size} · Qty {quantity}</span></div>
-                  <b>{money(product.price * quantity)}</b>
+              {cartItems.map((line) => {
+                const { product, quantity, size } = line
+                const variant = variantForLine(line)
+                return <div className="confirm-item" key={cartLineKey(line)}>
+                  <img src={shopifyImg(variant?.image || product.image, 240)} alt="" loading="lazy" decoding="async" />
+                  <div><strong>{product.name}</strong><span>{variant?.color ? `${variant.color} · ` : ""}Size {size} · Qty {quantity}</span></div>
+                  <b>{money(cartLinePricing(line).currentTotal)}</b>
                 </div>
-              ))}
+              })}
             </div>
 
             <div className="confirm-delivery">
